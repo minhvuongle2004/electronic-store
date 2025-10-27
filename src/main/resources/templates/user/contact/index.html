@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">Liên hệ - Electronic Store</title>
+
+    <!-- Bootstrap & jQuery -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <style>
+        .contact-hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 80px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .contact-hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="50" r="1" fill="white" opacity="0.1"/><circle cx="25" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+        }
+
+        .contact-hero .container {
+            position: relative;
+            z-index: 1;
+        }
+
+        .contact-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            margin-top: -50px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .info-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .info-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            transform: rotate(45deg);
+        }
+
+        .info-item {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .form-control {
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+
+        .btn-send {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 15px 40px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-send:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .map-container {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .social-links .btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+
+        .social-links .btn:hover {
+            transform: translateY(-3px);
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            backdrop-filter: blur(10px);
+        }
+
+        .back-btn:hover {
+            background: rgba(255,255,255,0.3);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Contact page specific functionality
+        function loadContactPageContent() {
+            const content = `
+                <!-- Hero Section -->
+                <div class="contact-hero">
+                    <div class="container text-center">
+                        <h1 class="display-4 mb-4">
+                            <i class="fas fa-envelope me-3"></i>
+                            Liên hệ với chúng tôi
+                        </h1>
+                        <p class="lead">
+                            Nếu bạn có thắc mắc, vui lòng để lại thông tin. Chúng tôi sẽ phản hồi trong 24h.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Contact Content -->
+                <div class="container">
+                    <div class="contact-card">
+                        <div class="row">
+                            <!-- Contact Info -->
+                            <div class="col-lg-4 mb-4">
+                                <div class="info-card">
+                                    <h3 class="mb-4">
+                                        <i class="fas fa-map-marker-alt me-2"></i>
+                                        Thông tin liên hệ
+                                    </h3>
+
+                                    <!-- Address -->
+                                    <div class="info-item">
+                                        <div class="d-flex align-items-start">
+                                            <i class="fas fa-map-marker-alt text-white-50 me-3 mt-1"></i>
+                                            <div>
+                                                <h6 class="mb-1">Địa chỉ</h6>
+                                                <p class="mb-0 small">123 Đường Nguyễn Văn Cừ<br>Quận 5, TP.HCM</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Phone -->
+                                    <div class="info-item">
+                                        <div class="d-flex align-items-start">
+                                            <i class="fas fa-phone text-white-50 me-3 mt-1"></i>
+                                            <div>
+                                                <h6 class="mb-1">Số điện thoại</h6>
+                                                <p class="mb-0 small">
+                                                    <a href="tel:0123456789" class="text-white text-decoration-none">
+                                                        0123-456-789
+                                                    </a>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Email -->
+                                    <div class="info-item">
+                                        <div class="d-flex align-items-start">
+                                            <i class="fas fa-envelope text-white-50 me-3 mt-1"></i>
+                                            <div>
+                                                <h6 class="mb-1">Email</h6>
+                                                <p class="mb-0 small">
+                                                    <a href="mailto:contact@electronicstore.vn" class="text-white text-decoration-none">
+                                                        contact@electronicstore.vn
+                                                    </a>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Working Hours -->
+                                    <div class="info-item">
+                                        <div class="d-flex align-items-start">
+                                            <i class="fas fa-clock text-white-50 me-3 mt-1"></i>
+                                            <div>
+                                                <h6 class="mb-1">Giờ làm việc</h6>
+                                                <p class="mb-0 small">
+                                                    T2-T6: 8:00 - 18:00<br>
+                                                    T7: 8:00 - 17:00<br>
+                                                    CN: 9:00 - 16:00
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Contact Form -->
+                            <div class="col-lg-8">
+                                <h3 class="mb-4">
+                                    <i class="fas fa-paper-plane me-2 text-primary"></i>
+                                    Gửi tin nhắn
+                                </h3>
+
+                                <form id="contactForm" novalidate>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="fullName" class="form-label">Họ và tên <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="fullName" name="fullName" required>
+                                            <div class="invalid-feedback">Vui lòng nhập họ và tên</div>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+                                            <input type="email" class="form-control" id="email" name="email" required>
+                                            <div class="invalid-feedback">Vui lòng nhập email hợp lệ</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="phone" class="form-label">Số điện thoại</label>
+                                            <input type="tel" class="form-control" id="phone" name="phone">
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="subject" class="form-label">Tiêu đề <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="subject" name="subject" required>
+                                            <div class="invalid-feedback">Vui lòng nhập tiêu đề</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        <label for="message" class="form-label">Nội dung tin nhắn <span class="text-danger">*</span></label>
+                                        <textarea class="form-control" id="message" name="message" rows="6" required
+                                                  placeholder="Nhập nội dung tin nhắn của bạn..."></textarea>
+                                        <div class="invalid-feedback">Vui lòng nhập nội dung tin nhắn</div>
+                                    </div>
+
+                                    <div class="text-center">
+                                        <button type="submit" class="btn btn-primary btn-send">
+                                            <i class="fas fa-paper-plane me-2"></i>
+                                            Gửi tin nhắn
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Google Maps -->
+                    <div class="row mt-5">
+                        <div class="col-12">
+                            <h3 class="mb-4 text-center">
+                                <i class="fas fa-map-marked-alt me-2 text-primary"></i>
+                                Bản đồ
+                            </h3>
+                            <div class="map-container">
+                                <iframe
+                                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3919.6506330801833!2d106.68086631533385!3d10.759840992329437!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31752f1c06f4e1dd%3A0x43900f1d4539a3d!2s123%20Nguyễn%20Văn%20Cừ%2C%20Phường%204%2C%20Quận%205%2C%20Thành%20phố%20Hồ%20Chí%20Minh!5e0!3m2!1svi!2s!4v1635687891234!5m2!1svi!2s"
+                                    width="100%"
+                                    height="400"
+                                    style="border:0;"
+                                    allowfullscreen=""
+                                    loading="lazy"
+                                    referrerpolicy="no-referrer-when-downgrade">
+                                </iframe>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Social Media -->
+                    <div class="row mt-5 mb-5">
+                        <div class="col-12 text-center">
+                            <h3 class="mb-4">
+                                <i class="fas fa-share-alt me-2 text-primary"></i>
+                                Kết nối với chúng tôi
+                            </h3>
+                            <div class="social-links">
+                                <a href="#" class="btn btn-primary" title="Facebook">
+                                    <i class="fab fa-facebook-f"></i>
+                                </a>
+                                <a href="#" class="btn btn-success" title="Zalo">
+                                    <i class="fas fa-comment"></i>
+                                </a>
+                                <a href="#" class="btn btn-primary" title="Messenger">
+                                    <i class="fab fa-facebook-messenger"></i>
+                                </a>
+                                <a href="#" class="btn btn-info" title="Telegram">
+                                    <i class="fab fa-telegram"></i>
+                                </a>
+                                <a href="mailto:contact@electronicstore.vn" class="btn btn-danger" title="Gmail">
+                                    <i class="fas fa-envelope"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('pageContent').innerHTML = content;
+
+            // Initialize contact form validation and handling
+            initContactForm();
+        }
+
+        function initContactForm() {
+            const form = document.getElementById('contactForm');
+            if (!form) return;
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (form.checkValidity()) {
+                    // Show success message
+                    showSuccessMessage();
+                    form.reset();
+                    form.classList.remove('was-validated');
+                } else {
+                    form.classList.add('was-validated');
+                }
+            }, false);
+        }
+
+        function showSuccessMessage() {
+            // Create and show success modal
+            const modalHtml = '<div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">' +
+                '<div class="modal-dialog modal-dialog-centered">' +
+                '<div class="modal-content">' +
+                '<div class="modal-header bg-success text-white">' +
+                '<h5 class="modal-title" id="successModalLabel">' +
+                '<i class="fas fa-check-circle me-2"></i>' +
+                'Gửi thành công!' +
+                '</h5>' +
+                '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>' +
+                '</div>' +
+                '<div class="modal-body text-center">' +
+                '<i class="fas fa-envelope-open text-success mb-3" style="font-size: 3rem;"></i>' +
+                '<h5>Cảm ơn bạn đã liên hệ!</h5>' +
+                '<p class="mb-0">Chúng tôi đã nhận được tin nhắn của bạn và sẽ phản hồi trong vòng 24 giờ.</p>' +
+                '</div>' +
+                '<div class="modal-footer">' +
+                '<button type="button" class="btn btn-success" data-bs-dismiss="modal">' +
+                '<i class="fas fa-thumbs-up me-2"></i>' +
+                'Đã hiểu' +
+                '</button>' +
+                '</div>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('successModal'));
+            modal.show();
+
+            // Remove modal from DOM after it's hidden
+            document.getElementById('successModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
+        }
+
+        // Load layout with script execution
+        async function loadLayoutWithScripts(layoutUrl, contentLoader, activeNavPage) {
+            try {
+                const response = await fetch(layoutUrl);
+                const html = await response.text();
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
+
+                // Extract scripts before setting innerHTML
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Set the layout HTML
+                document.getElementById('layoutContainer').innerHTML = html;
+
+                // Execute scripts manually
+                scripts.forEach(script => {
+                    const newScript = document.createElement('script');
+                    if (script.src) {
+                        newScript.src = script.src;
+                    } else {
+                        newScript.textContent = script.textContent;
+                    }
+                    document.head.appendChild(newScript);
+                });
+
+                // Wait a bit for scripts to load, then initialize page
+                setTimeout(() => {
+                    // Set active navigation
+                    if (activeNavPage) {
+                        const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
+                        navLinks.forEach(link => {
+                            if (link.textContent.trim().toLowerCase().includes(activeNavPage.toLowerCase()) ||
+                                link.getAttribute('href') === '/user/' + activeNavPage) {
+                                link.classList.add('active');
+                            }
+                        });
+                    }
+
+                    // Load page content
+                    if (contentLoader && typeof contentLoader === 'function') {
+                        contentLoader();
+                    }
+
+                    // Initialize Bootstrap components
+                    if (typeof bootstrap !== 'undefined') {
+                        // Initialize tooltips, popovers, etc.
+                        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                        const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                            return new bootstrap.Tooltip(tooltipTriggerEl);
+                        });
+                    }
+                }, 100);
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="container mt-5">' +
+                        '<div class="alert alert-danger" role="alert">' +
+                            '<h4 class="alert-heading">Lỗi tải trang!</h4>' +
+                            '<p>Không thể tải layout. Vui lòng thử lại sau.</p>' +
+                            '<hr>' +
+                            '<p class="mb-0">' +
+                                '<a href="/user/home" class="btn btn-primary">' +
+                                    '<i class="fas fa-home me-2"></i>Về trang chủ' +
+                                '</a>' +
+                            '</p>' +
+                        '</div>' +
+                    '</div>';
+            }
+        }
+
+        // Initialize page when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            loadLayoutWithScripts('/user/layouts/app.html', loadContactPageContent, 'contact');
+        });
+    </script>
+</body>
+</html>

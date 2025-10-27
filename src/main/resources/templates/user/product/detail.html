@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chi tiết sản phẩm - Electronic Store</title>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="/js/CartService.js"></script>
+    <script src="/js/cart.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Utility function to properly load user layout with script execution
+        async function loadUserLayoutWithScripts(contentLoader) {
+            try {
+                console.log('Loading user layout...');
+
+                // Fetch the user layout
+                const response = await fetch('/user/layouts/app.html');
+                const layoutHtml = await response.text();
+
+                // Create a temporary container to parse the HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+
+                // Extract and execute scripts manually
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout into container
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually to ensure they run
+                scripts.forEach(script => {
+                    if (script.src) {
+                        // External script - check if already loaded
+                        if (!document.querySelector(`script[src="${script.src}"]`)) {
+                            const newScript = document.createElement('script');
+                            newScript.src = script.src;
+                            newScript.onload = () => console.log('External script loaded:', script.src);
+                            document.head.appendChild(newScript);
+                        }
+                    } else {
+                        // Inline script
+                        const newScript = document.createElement('script');
+                        newScript.textContent = script.textContent;
+                        document.head.appendChild(newScript);
+                    }
+                });
+
+                // Wait for layout and scripts to be fully loaded
+                setTimeout(() => {
+                    // Initialize Bootstrap dropdowns
+                    const dropdownElementList = document.querySelectorAll('.dropdown-toggle');
+                    const dropdownList = [...dropdownElementList].map(dropdownToggleEl => {
+                        return new bootstrap.Dropdown(dropdownToggleEl);
+                    });
+                    console.log('Bootstrap dropdowns initialized:', dropdownList.length);
+
+                    // Load page-specific content
+                    if (contentLoader) {
+                        contentLoader();
+                    }
+                }, 500);
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load user layout and inject product detail content
+        async function loadProductDetailPage() {
+            await loadUserLayoutWithScripts(loadProductDetailContent);
+        }
+
+        // Get product ID from URL or global variable
+        const productId = window.location.pathname.split('/').pop();
+
+        // Data storage
+        let productData = null;
+        let relatedProducts = [];
+        let currentQuantity = 1;
+
+        // Load product detail specific content
+        function loadProductDetailContent() {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                pageContent.innerHTML = `
+                    <!-- Loading Spinner -->
+                    <div id="loadingSpinner" class="loading-container">
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <p class="loading-text">Đang tải chi tiết sản phẩm...</p>
+                        </div>
+                    </div>
+
+                    <!-- Product Detail Content -->
+                    <div id="productDetailContainer" style="display: none;">
+                        <!-- Breadcrumb -->
+                        <section class="breadcrumb-section">
+                            <div class="container">
+                                <nav aria-label="breadcrumb" class="premium-breadcrumb">
+                                    <ol class="breadcrumb">
+                                        <li class="breadcrumb-item">
+                                            <a href="/user/home">
+                                                <i class="fas fa-home me-1"></i>Trang chủ
+                                            </a>
+                                        </li>
+                                        <li class="breadcrumb-item">
+                                            <a href="/user/products">
+                                                <i class="fas fa-microchip me-1"></i>Sản phẩm
+                                            </a>
+                                        </li>
+                                        <li class="breadcrumb-item" id="categoryBreadcrumb"></li>
+                                        <li class="breadcrumb-item active" aria-current="page" id="productBreadcrumb"></li>
+                                    </ol>
+                                </nav>
+                            </div>
+                        </section>
+
+                        <!-- Product Detail Main -->
+                        <section class="product-detail-section">
+                            <div class="container">
+                                <div class="row g-5">
+                                    <!-- Product Image -->
+                                    <div class="col-lg-6">
+                                        <div class="product-image-section">
+                                            <div class="product-main-image" id="productImageContainer">
+                                                <!-- Product image will be loaded here -->
+                                            </div>
+                                            <div class="image-zoom-hint">
+                                                <i class="fas fa-search-plus me-1"></i>
+                                                Click để phóng to ảnh
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Product Info -->
+                                    <div class="col-lg-6">
+                                        <div class="product-info-section">
+                                            <!-- Product Header -->
+                                            <div class="product-header">
+                                                <div class="product-category-tag" id="productCategoryTag">
+                                                    <i class="fas fa-tag me-1"></i>
+                                                    <span>Electronics</span>
+                                                </div>
+                                                <h1 class="product-title" id="productName"></h1>
+                                                <div class="product-rating">
+                                                    <div class="stars">
+                                                        <i class="fas fa-star"></i>
+                                                        <i class="fas fa-star"></i>
+                                                        <i class="fas fa-star"></i>
+                                                        <i class="fas fa-star"></i>
+                                                        <i class="fas fa-star"></i>
+                                                    </div>
+                                                    <span class="rating-text">(4.8/5 - 127 đánh giá)</span>
+                                                </div>
+                                            </div>
+
+                                            <!-- Price & Stock -->
+                                            <div class="price-stock-section">
+                                                <div class="price-container">
+                                                    <span class="current-price" id="productPrice"></span>
+                                                </div>
+                                                <div class="stock-container">
+                                                    <span class="stock-label">Tình trạng:</span>
+                                                    <span class="stock-status" id="stockStatus"></span>
+                                                </div>
+                                            </div>
+
+                                            <!-- Quantity Control -->
+                                            <div class="quantity-section">
+                                                <label class="quantity-label">Số lượng:</label>
+                                                <div class="quantity-controls">
+                                                    <button class="quantity-btn decrease-btn" onclick="decreaseQuantity()">
+                                                        <i class="fas fa-minus"></i>
+                                                    </button>
+                                                    <input type="number" class="quantity-input" id="quantityInput"
+                                                           value="1" min="1" onchange="updateQuantity(this.value)">
+                                                    <button class="quantity-btn increase-btn" onclick="increaseQuantity()">
+                                                        <i class="fas fa-plus"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Action Buttons -->
+                                            <div class="action-buttons">
+                                                <button class="btn-premium btn-add-cart" onclick="addToCart()">
+                                                    <i class="fas fa-shopping-bag me-2"></i>
+                                                    <span>Thêm vào giỏ hàng</span>
+                                                </button>
+                                                <button class="btn-premium btn-buy-now" onclick="buyNow()">
+                                                    <i class="fas fa-bolt me-2"></i>
+                                                    <span>Mua ngay</span>
+                                                </button>
+                                                <button class="btn-premium btn-wishlist" onclick="addToWishlist()">
+                                                    <i class="fas fa-heart me-2"></i>
+                                                    <span>Yêu thích</span>
+                                                </button>
+                                            </div>
+
+                                            <!-- Features -->
+                                            <div class="product-features">
+                                                <div class="feature-item">
+                                                    <div class="feature-icon">
+                                                        <i class="fas fa-shield-alt"></i>
+                                                    </div>
+                                                    <div class="feature-content">
+                                                        <span class="feature-title">Bảo hành chính hãng</span>
+                                                        <span class="feature-desc">12-36 tháng</span>
+                                                    </div>
+                                                </div>
+                                                <div class="feature-item">
+                                                    <div class="feature-icon">
+                                                        <i class="fas fa-shipping-fast"></i>
+                                                    </div>
+                                                    <div class="feature-content">
+                                                        <span class="feature-title">Giao hàng nhanh</span>
+                                                        <span class="feature-desc">2-4 giờ nội thành</span>
+                                                    </div>
+                                                </div>
+                                                <div class="feature-item">
+                                                    <div class="feature-icon">
+                                                        <i class="fas fa-undo"></i>
+                                                    </div>
+                                                    <div class="feature-content">
+                                                        <span class="feature-title">Đổi trả dễ dàng</span>
+                                                        <span class="feature-desc">7 ngày không lý do</span>
+                                                    </div>
+                                                </div>
+                                                <div class="feature-item">
+                                                    <div class="feature-icon">
+                                                        <i class="fas fa-headset"></i>
+                                                    </div>
+                                                    <div class="feature-content">
+                                                        <span class="feature-title">Hỗ trợ 24/7</span>
+                                                        <span class="feature-desc">Tư vấn kỹ thuật</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Product Description -->
+                        <section class="description-section">
+                            <div class="container">
+                                <div class="description-card">
+                                    <div class="description-header">
+                                        <h3 class="description-title">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            Thông tin chi tiết
+                                        </h3>
+                                    </div>
+                                    <div class="description-content" id="productDescription">
+                                        <!-- Description will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Related Products -->
+                        <section class="related-products-section">
+                            <div class="container">
+                                <div class="section-header">
+                                    <h3 class="section-title">
+                                        <i class="fas fa-layer-group me-2"></i>
+                                        Sản phẩm liên quan
+                                    </h3>
+                                    <p class="section-subtitle">Khám phá những sản phẩm tương tự khác</p>
+                                </div>
+                                <div id="relatedProductsContainer">
+                                    <!-- Loading related products -->
+                                    <div class="loading-related">
+                                        <div class="spinner-small"></div>
+                                        <span>Đang tải sản phẩm liên quan...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- Error Message -->
+                    <div id="errorMessage" style="display: none;" class="error-section">
+                        <div class="container">
+                            <div class="error-content">
+                                <div class="error-icon">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                </div>
+                                <h3 class="error-title">Không tìm thấy sản phẩm</h3>
+                                <p class="error-text">Sản phẩm không tồn tại hoặc đã bị xóa khỏi hệ thống</p>
+                                <a href="/user/products" class="btn-premium btn-back">
+                                    <i class="fas fa-arrow-left me-2"></i>
+                                    <span>Quay lại danh sách sản phẩm</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <style>
+                        /* Product Detail Page Styles */
+                        .breadcrumb-section {
+                            padding: 24px 0;
+                            background: #FAFAFA;
+                            border-bottom: 1px solid #E0E0E0;
+                        }
+
+                        .premium-breadcrumb .breadcrumb {
+                            background: none;
+                            padding: 0;
+                            margin: 0;
+                            font-size: 14px;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item {
+                            font-weight: 500;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item a {
+                            color: #9E9E9E;
+                            text-decoration: none;
+                            transition: color 0.3s ease;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item a:hover {
+                            color: #3B82F6;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item.active {
+                            color: #2E2E2E;
+                            font-weight: 600;
+                        }
+
+                        /* Product Detail Main */
+                        .product-detail-section {
+                            padding: 60px 0;
+                            background: white;
+                        }
+
+                        /* Product Image */
+                        .product-image-section {
+                            position: sticky;
+                            top: 100px;
+                        }
+
+                        .product-main-image {
+                            background: linear-gradient(135deg, #FAFAFA, #F8FAFC);
+                            border-radius: 16px;
+                            border: 1px solid #E0E0E0;
+                            height: 500px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            overflow: hidden;
+                            position: relative;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                        }
+
+                        .product-main-image:hover {
+                            border-color: #3B82F6;
+                            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.15);
+                        }
+
+                        .product-main-image img {
+                            max-width: 90%;
+                            max-height: 90%;
+                            object-fit: contain;
+                            object-position: center;
+                            transition: transform 0.3s ease;
+                        }
+
+                        .product-main-image:hover img {
+                            transform: scale(1.05);
+                        }
+
+                        .product-placeholder-detail {
+                            width: 120px;
+                            height: 120px;
+                            background: linear-gradient(135deg, #E0E0E0, #9E9E9E);
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: white;
+                            font-size: 48px;
+                        }
+
+                        .image-zoom-hint {
+                            margin-top: 12px;
+                            text-align: center;
+                            color: #9E9E9E;
+                            font-size: 12px;
+                            font-weight: 500;
+                        }
+
+                        /* Product Info */
+                        .product-info-section {
+                            padding-left: 40px;
+                        }
+
+                        .product-header {
+                            margin-bottom: 32px;
+                        }
+
+                        .product-category-tag {
+                            display: inline-flex;
+                            align-items: center;
+                            background: rgba(59, 130, 246, 0.1);
+                            color: #3B82F6;
+                            padding: 6px 12px;
+                            border-radius: 20px;
+                            font-size: 12px;
+                            font-weight: 600;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            margin-bottom: 16px;
+                        }
+
+                        .product-title {
+                            font-size: 2.5rem;
+                            font-weight: 700;
+                            color: #121212;
+                            line-height: 1.2;
+                            margin-bottom: 16px;
+                            letter-spacing: -0.025em;
+                        }
+
+                        .product-rating {
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                        }
+
+                        .stars {
+                            color: #F59E0B;
+                            font-size: 16px;
+                        }
+
+                        .rating-text {
+                            color: #9E9E9E;
+                            font-size: 14px;
+                        }
+
+                        /* Price & Stock */
+                        .price-stock-section {
+                            padding: 24px 0;
+                            border-top: 1px solid #E0E0E0;
+                            border-bottom: 1px solid #E0E0E0;
+                            margin-bottom: 32px;
+                        }
+
+                        .price-container {
+                            margin-bottom: 12px;
+                        }
+
+                        .current-price {
+                            font-size: 2rem;
+                            font-weight: 700;
+                            color: #3B82F6;
+                            font-family: 'JetBrains Mono', monospace;
+                        }
+
+                        .stock-container {
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                        }
+
+                        .stock-label {
+                            font-weight: 600;
+                            color: #2E2E2E;
+                        }
+
+                        .stock-status {
+                            padding: 4px 12px;
+                            border-radius: 20px;
+                            font-size: 12px;
+                            font-weight: 600;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                        }
+
+                        .stock-status.in-stock {
+                            background: rgba(16, 185, 129, 0.1);
+                            color: #10B981;
+                        }
+
+                        .stock-status.low-stock {
+                            background: rgba(245, 158, 11, 0.1);
+                            color: #F59E0B;
+                        }
+
+                        .stock-status.out-of-stock {
+                            background: rgba(239, 68, 68, 0.1);
+                            color: #EF4444;
+                        }
+
+                        /* Quantity Control */
+                        .quantity-section {
+                            margin-bottom: 32px;
+                        }
+
+                        .quantity-label {
+                            display: block;
+                            font-weight: 600;
+                            color: #2E2E2E;
+                            margin-bottom: 12px;
+                        }
+
+                        .quantity-controls {
+                            display: flex;
+                            align-items: center;
+                            gap: 0;
+                            width: fit-content;
+                        }
+
+                        .quantity-btn {
+                            width: 48px;
+                            height: 48px;
+                            background: white;
+                            border: 1px solid #E0E0E0;
+                            color: #2E2E2E;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            transition: all 0.3s ease;
+                            font-size: 14px;
+                        }
+
+                        .decrease-btn {
+                            border-radius: 8px 0 0 8px;
+                        }
+
+                        .increase-btn {
+                            border-radius: 0 8px 8px 0;
+                        }
+
+                        .quantity-btn:hover {
+                            background: #3B82F6;
+                            border-color: #3B82F6;
+                            color: white;
+                        }
+
+                        .quantity-input {
+                            width: 80px;
+                            height: 48px;
+                            border: 1px solid #E0E0E0;
+                            border-left: none;
+                            border-right: none;
+                            text-align: center;
+                            font-weight: 600;
+                            color: #2E2E2E;
+                            background: white;
+                        }
+
+                        .quantity-input:focus {
+                            outline: none;
+                            background: #F8FAFC;
+                        }
+
+                        /* Action Buttons */
+                        .action-buttons {
+                            display: flex;
+                            flex-direction: column;
+                            gap: 12px;
+                            margin-bottom: 40px;
+                        }
+
+                        .btn-premium {
+                            padding: 16px 24px;
+                            border-radius: 12px;
+                            font-weight: 600;
+                            font-size: 16px;
+                            border: none;
+                            cursor: pointer;
+                            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            text-decoration: none;
+                            position: relative;
+                            overflow: hidden;
+                        }
+
+                        .btn-add-cart {
+                            background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+                            color: white;
+                            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+                        }
+
+                        .btn-add-cart:hover {
+                            transform: translateY(-2px);
+                            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+                        }
+
+                        .btn-buy-now {
+                            background: linear-gradient(135deg, #10B981, #059669);
+                            color: white;
+                            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+                        }
+
+                        .btn-buy-now:hover {
+                            transform: translateY(-2px);
+                            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+                        }
+
+                        .btn-wishlist {
+                            background: white;
+                            color: #EF4444;
+                            border: 2px solid #EF4444;
+                        }
+
+                        .btn-wishlist:hover {
+                            background: #EF4444;
+                            color: white;
+                            transform: translateY(-1px);
+                        }
+
+                        .btn-back {
+                            background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+                            color: white;
+                        }
+
+                        .btn-back:hover {
+                            transform: translateY(-2px);
+                            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+                        }
+
+                        /* Features */
+                        .product-features {
+                            display: grid;
+                            grid-template-columns: 1fr 1fr;
+                            gap: 16px;
+                        }
+
+                        .feature-item {
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                            padding: 16px;
+                            background: #FAFAFA;
+                            border-radius: 12px;
+                            border: 1px solid #E0E0E0;
+                            transition: all 0.3s ease;
+                        }
+
+                        .feature-item:hover {
+                            background: white;
+                            border-color: #3B82F6;
+                            transform: translateY(-1px);
+                        }
+
+                        .feature-icon {
+                            width: 40px;
+                            height: 40px;
+                            background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+                            border-radius: 10px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: white;
+                            font-size: 16px;
+                            flex-shrink: 0;
+                        }
+
+                        .feature-content {
+                            display: flex;
+                            flex-direction: column;
+                        }
+
+                        .feature-title {
+                            font-weight: 600;
+                            color: #2E2E2E;
+                            font-size: 14px;
+                        }
+
+                        .feature-desc {
+                            font-size: 12px;
+                            color: #9E9E9E;
+                        }
+
+                        /* Description Section */
+                        .description-section {
+                            padding: 60px 0;
+                            background: #FAFAFA;
+                        }
+
+                        .description-card {
+                            background: white;
+                            border-radius: 16px;
+                            border: 1px solid #E0E0E0;
+                            overflow: hidden;
+                        }
+
+                        .description-header {
+                            padding: 24px 32px;
+                            background: linear-gradient(135deg, #FAFAFA, #F8FAFC);
+                            border-bottom: 1px solid #E0E0E0;
+                        }
+
+                        .description-title {
+                            font-size: 1.5rem;
+                            font-weight: 600;
+                            color: #121212;
+                            margin: 0;
+                        }
+
+                        .description-content {
+                            padding: 32px;
+                            color: #2E2E2E;
+                            line-height: 1.6;
+                        }
+
+                        /* Related Products */
+                        .related-products-section {
+                            padding: 60px 0 80px;
+                            background: white;
+                        }
+
+                        .section-header {
+                            text-align: center;
+                            margin-bottom: 48px;
+                        }
+
+                        .section-title {
+                            font-size: 2rem;
+                            font-weight: 700;
+                            color: #121212;
+                            margin-bottom: 12px;
+                        }
+
+                        .section-subtitle {
+                            color: #9E9E9E;
+                            font-size: 1.125rem;
+                        }
+
+                        .loading-related {
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            gap: 12px;
+                            padding: 40px 0;
+                            color: #9E9E9E;
+                        }
+
+                        .spinner-small {
+                            width: 20px;
+                            height: 20px;
+                            border: 2px solid #E0E0E0;
+                            border-top: 2px solid #3B82F6;
+                            border-radius: 50%;
+                            animation: spin 1s linear infinite;
+                        }
+
+                        /* Loading */
+                        .loading-container {
+                            padding: 120px 0;
+                            text-align: center;
+                            background: white;
+                        }
+
+                        .loading-spinner {
+                            display: inline-flex;
+                            flex-direction: column;
+                            align-items: center;
+                            gap: 16px;
+                        }
+
+                        .spinner {
+                            width: 40px;
+                            height: 40px;
+                            border: 3px solid #E0E0E0;
+                            border-top: 3px solid #3B82F6;
+                            border-radius: 50%;
+                            animation: spin 1s linear infinite;
+                        }
+
+                        @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+
+                        .loading-text {
+                            color: #9E9E9E;
+                            font-size: 14px;
+                            margin: 0;
+                        }
+
+                        /* Error Section */
+                        .error-section {
+                            padding: 120px 0;
+                            background: white;
+                        }
+
+                        .error-content {
+                            text-align: center;
+                            max-width: 400px;
+                            margin: 0 auto;
+                        }
+
+                        .error-icon {
+                            width: 80px;
+                            height: 80px;
+                            background: linear-gradient(135deg, #F59E0B, #D97706);
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0 auto 24px;
+                            color: white;
+                            font-size: 32px;
+                        }
+
+                        .error-title {
+                            font-size: 1.5rem;
+                            font-weight: 600;
+                            color: #2E2E2E;
+                            margin-bottom: 12px;
+                        }
+
+                        .error-text {
+                            color: #9E9E9E;
+                            margin-bottom: 32px;
+                            line-height: 1.5;
+                        }
+
+                        /* Responsive */
+                        @media (max-width: 991.98px) {
+                            .product-info-section {
+                                padding-left: 0;
+                                margin-top: 40px;
+                            }
+
+                            .product-title {
+                                font-size: 2rem;
+                            }
+
+                            .current-price {
+                                font-size: 1.75rem;
+                            }
+
+                            .product-features {
+                                grid-template-columns: 1fr;
+                            }
+
+                            .action-buttons {
+                                flex-direction: column;
+                            }
+                        }
+
+                        @media (max-width: 767.98px) {
+                            .product-title {
+                                font-size: 1.75rem;
+                            }
+
+                            .current-price {
+                                font-size: 1.5rem;
+                            }
+
+                            .product-main-image {
+                                height: 300px;
+                            }
+
+                            .description-header {
+                                padding: 20px 24px;
+                            }
+
+                            .description-content {
+                                padding: 24px;
+                            }
+
+                            .btn-premium {
+                                padding: 14px 20px;
+                                font-size: 14px;
+                            }
+                        }
+                    </style>
+                `;
+
+                // Hide skeleton when content is ready
+                if (typeof window.hideSkeleton === 'function') {
+                    window.hideSkeleton();
+                }
+
+                // Initialize features
+                initProductDetailFeatures();
+            }
+        }
+
+        // Initialize product detail features
+        function initProductDetailFeatures() {
+            // Load product data
+            loadProductDetail();
+            // Check wishlist status
+            checkWishlistStatus();
+        }
+
+        // Load product detail from API
+        async function loadProductDetail() {
+            try {
+                showLoadingSpinner();
+
+                const response = await axios.get(`/api/products/${productId}`);
+
+                if (response.data.success) {
+                    productData = response.data.data;
+                    renderProductDetail();
+                    loadRelatedProducts();
+                } else {
+                    showErrorMessage();
+                }
+
+            } catch (error) {
+                console.error('Error loading product detail:', error);
+                showErrorMessage();
+            }
+        }
+
+        // Load related products
+        async function loadRelatedProducts() {
+            try {
+                const response = await axios.get(`/api/products/${productId}/related`);
+
+                if (response.data.success) {
+                    relatedProducts = response.data.data.content;
+                    renderRelatedProducts();
+                }
+
+            } catch (error) {
+                console.error('Error loading related products:', error);
+                document.getElementById('relatedProductsContainer').innerHTML =
+                    '<p class="text-muted text-center">Không thể tải sản phẩm liên quan</p>';
+            }
+        }
+
+        // Render product detail
+        function renderProductDetail() {
+            // Update breadcrumb
+            const categoryName = productData.category?.name || 'Danh mục';
+            const categoryId = productData.categoryId || productData.category?.id || '';
+            document.getElementById('categoryBreadcrumb').innerHTML =
+                `<a href="/user/products?category=${categoryId}">${escapeHtml(categoryName)}</a>`;
+            document.getElementById('productBreadcrumb').textContent = productData.name;
+
+            // Update product name
+            document.getElementById('productName').textContent = productData.name;
+
+            // Update product price
+            document.getElementById('productPrice').textContent = formatPrice(productData.price);
+
+            // Update stock status
+            const stockStatus = document.getElementById('stockStatus');
+            if (productData.stock <= 0) {
+                stockStatus.textContent = 'Hết hàng';
+                stockStatus.className = 'stock-status out-of-stock';
+                document.getElementById('quantityInput').disabled = true;
+                document.querySelectorAll('button[onclick*="Quantity"]').forEach(btn => btn.disabled = true);
+                document.querySelector('button[onclick="addToCart()"]').disabled = true;
+                document.querySelector('button[onclick="buyNow()"]').disabled = true;
+            } else if (productData.stock < 10) {
+                stockStatus.textContent = `Còn ${productData.stock} sản phẩm`;
+                stockStatus.className = 'stock-status low-stock';
+            } else {
+                stockStatus.textContent = 'Còn hàng';
+                stockStatus.className = 'stock-status in-stock';
+            }
+
+            // Update quantity input max
+            document.getElementById('quantityInput').max = productData.stock;
+
+            // Update product image
+            const imageContainer = document.getElementById('productImageContainer');
+            if (productData.imageUrl) {
+                imageContainer.innerHTML = `
+                    <img src="${productData.imageUrl}" alt="${escapeHtml(productData.name)}"
+                         onclick="openImageModal('${productData.imageUrl}', '${escapeHtml(productData.name)}')">
+                `;
+            } else {
+                imageContainer.innerHTML = `
+                    <div class="product-placeholder-detail">
+                        <i class="fas fa-microchip"></i>
+                    </div>
+                `;
+            }
+
+            // Update product description
+            const descriptionContainer = document.getElementById('productDescription');
+            if (productData.description && productData.description.trim()) {
+                descriptionContainer.innerHTML = `<p>${escapeHtml(productData.description).replace(/\n/g, '<br>')}</p>`;
+            } else {
+                descriptionContainer.innerHTML = '<p class="text-muted">Chưa có mô tả cho sản phẩm này.</p>';
+            }
+
+            hideLoadingSpinner();
+        }
+
+        // Render related products
+        function renderRelatedProducts() {
+            const container = document.getElementById('relatedProductsContainer');
+
+            if (relatedProducts.length === 0) {
+                container.innerHTML = `
+                    <div class="no-related-products">
+                        <div class="no-related-icon">
+                            <i class="fas fa-box-open"></i>
+                        </div>
+                        <p class="no-related-text">Không có sản phẩm liên quan</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="related-products-grid">
+                    ${relatedProducts.map(product => `
+                        <div class="related-product-card" onclick="viewProductDetail(${product.id})">
+                            <div class="related-product-image">
+                                ${product.imageUrl ?
+                                    `<img src="${product.imageUrl}" alt="${escapeHtml(product.name)}" class="related-img">` :
+                                    `<div class="related-placeholder">
+                                         <i class="fas fa-microchip"></i>
+                                     </div>`
+                                }
+                            </div>
+                            <div class="related-product-info">
+                                <h4 class="related-product-name">${escapeHtml(product.name)}</h4>
+                                <div class="related-product-price">${formatPrice(product.price)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <style>
+                    .related-products-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+                        gap: 20px;
+                    }
+
+                    .related-product-card {
+                        background: white;
+                        border-radius: 12px;
+                        border: 1px solid #E0E0E0;
+                        overflow: hidden;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                    }
+
+                    .related-product-card:hover {
+                        transform: translateY(-3px);
+                        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+                        border-color: #3B82F6;
+                    }
+
+                    .related-product-image {
+                        height: 160px;
+                        background: linear-gradient(135deg, #FAFAFA, #F8FAFC);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        overflow: hidden;
+                    }
+
+                    .related-img {
+                        width: 100%;
+                        height: 100%;
+                        object-fit: contain;
+                        object-position: center;
+                        padding: 12px;
+                        transition: transform 0.3s ease;
+                    }
+
+                    .related-product-card:hover .related-img {
+                        transform: scale(1.05);
+                    }
+
+                    .related-placeholder {
+                        width: 60px;
+                        height: 60px;
+                        background: linear-gradient(135deg, #E0E0E0, #9E9E9E);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: white;
+                        font-size: 24px;
+                    }
+
+                    .related-product-info {
+                        padding: 16px;
+                    }
+
+                    .related-product-name {
+                        font-size: 14px;
+                        font-weight: 600;
+                        color: #121212;
+                        margin-bottom: 8px;
+                        line-height: 1.3;
+                        display: -webkit-box;
+                        -webkit-line-clamp: 2;
+                        -webkit-box-orient: vertical;
+                        overflow: hidden;
+                    }
+
+                    .related-product-price {
+                        font-size: 16px;
+                        font-weight: 700;
+                        color: #3B82F6;
+                        font-family: 'JetBrains Mono', monospace;
+                    }
+
+                    .no-related-products {
+                        text-align: center;
+                        padding: 60px 0;
+                    }
+
+                    .no-related-icon {
+                        width: 60px;
+                        height: 60px;
+                        background: linear-gradient(135deg, #F8FAFC, #E0E0E0);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        margin: 0 auto 16px;
+                        color: #9E9E9E;
+                        font-size: 24px;
+                    }
+
+                    .no-related-text {
+                        color: #9E9E9E;
+                        margin: 0;
+                    }
+
+                    @media (max-width: 767.98px) {
+                        .related-products-grid {
+                            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                            gap: 16px;
+                        }
+
+                        .related-product-image {
+                            height: 140px;
+                        }
+
+                        .related-product-info {
+                            padding: 12px;
+                        }
+                    }
+                </style>
+            `;
+        }
+
+        // Quantity control functions
+        function increaseQuantity() {
+            const input = document.getElementById('quantityInput');
+            const max = parseInt(input.max);
+            const current = parseInt(input.value);
+
+            if (current < max) {
+                input.value = current + 1;
+                currentQuantity = current + 1;
+            }
+        }
+
+        function decreaseQuantity() {
+            const input = document.getElementById('quantityInput');
+            const current = parseInt(input.value);
+
+            if (current > 1) {
+                input.value = current - 1;
+                currentQuantity = current - 1;
+            }
+        }
+
+        function updateQuantity(value) {
+            const quantity = parseInt(value);
+            const max = parseInt(document.getElementById('quantityInput').max);
+
+            if (quantity < 1) {
+                document.getElementById('quantityInput').value = 1;
+                currentQuantity = 1;
+            } else if (quantity > max) {
+                document.getElementById('quantityInput').value = max;
+                currentQuantity = max;
+            } else {
+                currentQuantity = quantity;
+            }
+        }
+
+        // Action functions
+        function addToCart() {
+            if (!productData) {
+                showAlert('error', 'Không thể thêm sản phẩm vào giỏ hàng');
+                return;
+            }
+
+            const quantity = parseInt(document.getElementById('quantityInput').value);
+
+            // Check stock
+            if (productData.stock <= 0) {
+                showAlert('error', 'Sản phẩm đã hết hàng');
+                return;
+            }
+
+            if (quantity > productData.stock) {
+                showAlert('error', `Chỉ còn ${productData.stock} sản phẩm trong kho`);
+                return;
+            }
+
+            // Add to cart using global cart service
+            const result = addToCartWithFeedback(productData, quantity);
+
+            // Optional: Update button state on success
+            if (result.success) {
+                // Check if product already in cart to show different message
+                const cartItem = window.cartService?.getItem(productData.id);
+                if (cartItem) {
+                    console.log(`Cart updated: Product ${productData.id}, Total quantity: ${cartItem.quantity}`);
+                }
+            }
+        }
+
+        function buyNow() {
+            if (!productData) {
+                showAlert('error', 'Không thể mua sản phẩm');
+                return;
+            }
+
+            const quantity = parseInt(document.getElementById('quantityInput').value);
+
+            // Check stock
+            if (productData.stock <= 0) {
+                showAlert('error', 'Sản phẩm đã hết hàng');
+                return;
+            }
+
+            if (quantity > productData.stock) {
+                showAlert('error', `Chỉ còn ${productData.stock} sản phẩm trong kho`);
+                return;
+            }
+
+            // Add to cart temporarily for checkout
+            if (window.cartService) {
+                // Use existing cart service
+                window.cartService.addItem(productData, quantity);
+            } else {
+                // Fallback: Add directly to localStorage
+                try {
+                    let cart = { items: [] };
+                    const existingCart = localStorage.getItem('electronic_store_cart');
+                    if (existingCart) {
+                        cart = JSON.parse(existingCart);
+                        if (!cart.items) cart.items = [];
+                    }
+
+                    // Check if product already exists
+                    const existingItemIndex = cart.items.findIndex(item => item.id === productData.id);
+
+                    if (existingItemIndex >= 0) {
+                        // Update quantity
+                        cart.items[existingItemIndex].quantity = quantity;
+                    } else {
+                        // Add new item
+                        cart.items.push({
+                            id: productData.id,
+                            name: productData.name,
+                            price: productData.price,
+                            imageUrl: productData.imageUrl,
+                            quantity: quantity,
+                            stock: productData.stock
+                        });
+                    }
+
+                    localStorage.setItem('electronic_store_cart', JSON.stringify(cart));
+                } catch (error) {
+                    console.error('Error adding to cart:', error);
+                    showAlert('error', 'Không thể thêm sản phẩm vào giỏ hàng');
+                    return;
+                }
+            }
+
+            // Redirect to checkout
+            window.location.href = '/user/checkout';
+        }
+
+        async function addToWishlist() {
+            if (!productData) {
+                showAlert('error', 'Không thể thêm sản phẩm vào danh sách yêu thích');
+                return;
+            }
+
+            try {
+                const response = await axios.post(`/api/wishlist/${productId}`);
+
+                if (response.data.success) {
+                    showAlert('success', response.data.message);
+                    updateWishlistButton(true);
+                    updateWishlistCounter();
+                } else {
+                    showAlert('error', response.data.message);
+                }
+            } catch (error) {
+                console.error('Error adding to wishlist:', error);
+                if (error.response && error.response.status === 401) {
+                    showAlert('error', 'Vui lòng đăng nhập để sử dụng chức năng này');
+                } else {
+                    showAlert('error', 'Không thể thêm vào danh sách yêu thích');
+                }
+            }
+        }
+
+        // View product detail (for related products)
+        function viewProductDetail(productId) {
+            window.location.href = `/user/products/${productId}`;
+        }
+
+        // Image modal function
+        function openImageModal(imageUrl, productName) {
+            // Create simple image modal
+            const modal = `
+                <div class="modal fade" id="imageModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">${escapeHtml(productName)}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <img src="${imageUrl}" alt="${escapeHtml(productName)}" class="img-fluid">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Remove existing modal
+            const existingModal = document.getElementById('imageModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // Add new modal
+            document.body.insertAdjacentHTML('beforeend', modal);
+
+            // Show modal
+            const modalElement = new bootstrap.Modal(document.getElementById('imageModal'));
+            modalElement.show();
+        }
+
+        // Wishlist helper functions
+        async function checkWishlistStatus() {
+            try {
+                const response = await axios.get(`/api/wishlist/check/${productId}`);
+                if (response.data.success) {
+                    updateWishlistButton(response.data.data);
+                }
+            } catch (error) {
+                console.log('User not logged in or error checking wishlist status');
+            }
+        }
+
+        function updateWishlistButton(isInWishlist) {
+            const button = document.querySelector('button[onclick="addToWishlist()"]');
+            if (button) {
+                if (isInWishlist) {
+                    button.innerHTML = '<i class="fas fa-heart me-2"></i>Đã yêu thích';
+                    button.className = 'btn btn-danger';
+                    button.setAttribute('onclick', 'removeFromWishlist()');
+                } else {
+                    button.innerHTML = '<i class="fas fa-heart me-2"></i>Thêm vào yêu thích';
+                    button.className = 'btn btn-outline-danger';
+                    button.setAttribute('onclick', 'addToWishlist()');
+                }
+            }
+        }
+
+        async function removeFromWishlist() {
+            try {
+                const response = await axios.delete(`/api/wishlist/${productId}`);
+
+                if (response.data.success) {
+                    showAlert('success', response.data.message);
+                    updateWishlistButton(false);
+                    updateWishlistCounter();
+                } else {
+                    showAlert('error', response.data.message);
+                }
+            } catch (error) {
+                console.error('Error removing from wishlist:', error);
+                showAlert('error', 'Không thể xóa khỏi danh sách yêu thích');
+            }
+        }
+
+        async function updateWishlistCounter() {
+            try {
+                const response = await axios.get('/api/wishlist/count');
+                if (response.data.success) {
+                    const counter = document.getElementById('wishlistCounter');
+                    if (counter) {
+                        const count = response.data.data;
+                        if (count > 0) {
+                            counter.textContent = count;
+                            counter.style.display = 'inline';
+                        } else {
+                            counter.style.display = 'none';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.log('Error updating wishlist counter');
+            }
+        }
+
+        // Utility functions
+        function showLoadingSpinner() {
+            document.getElementById('loadingSpinner').style.display = 'block';
+            document.getElementById('productDetailContainer').style.display = 'none';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function hideLoadingSpinner() {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('productDetailContainer').style.display = 'block';
+        }
+
+        function showErrorMessage() {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('productDetailContainer').style.display = 'none';
+            document.getElementById('errorMessage').style.display = 'block';
+        }
+
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(price);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        function showAlert(type, message) {
+            // Use cart notification system
+            if (typeof showCartNotification === 'function') {
+                showCartNotification(type, message);
+            } else {
+                // Fallback to simple alert
+                alert(message);
+            }
+        }
+
+        // Load page when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            loadProductDetailPage();
+        });
+    </script>
+</body>
+</html>

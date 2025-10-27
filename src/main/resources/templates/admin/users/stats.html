@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thống kê Người dùng - Admin Panel</title>
+
+    <!-- Load Bootstrap/jQuery trước khi load layout -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Chart.js for statistics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="layoutContainer"></div>
+
+    <script>
+        // Function to load layout with proper script execution
+        async function loadLayoutWithScripts(layoutUrl, contentLoader, activeNavPage) {
+            try {
+                console.log('Loading layout from:', layoutUrl);
+
+                // Fetch layout
+                const response = await fetch(layoutUrl);
+                const layoutHtml = await response.text();
+
+                // Parse và execute scripts manually
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually
+                scripts.forEach(script => {
+                    if (script.src && !document.querySelector(`script[src="${script.src}"]`)) {
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        document.head.appendChild(newScript);
+                    } else if (!script.src) {
+                        const newScript = document.createElement('script');
+                        newScript.textContent = script.textContent;
+                        document.head.appendChild(newScript);
+                    }
+                });
+
+                // Initialize UI sau khi load
+                setTimeout(() => {
+                    console.log('Initializing UI components...');
+
+                    // Initialize Bootstrap components
+                    document.querySelectorAll('.dropdown-toggle').forEach(el => {
+                        new bootstrap.Dropdown(el);
+                    });
+
+                    // Set active nav nếu cần
+                    if (activeNavPage && window.AdminLayout) {
+                        window.AdminLayout.setActiveNav(activeNavPage);
+                    }
+
+                    // Load content
+                    if (contentLoader) contentLoader();
+                }, 500);
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+            }
+        }
+
+        // Load user stats page content
+        function loadUserStatsContent() {
+            console.log('Loading user stats content...');
+
+            const pageContent = document.getElementById('pageContent');
+            if (!pageContent) {
+                console.error('pageContent element not found');
+                return;
+            }
+
+            pageContent.innerHTML = `
+                <!-- Page Header -->
+                <div class="d-sm-flex align-items-center justify-content-between mb-4">
+                    <div>
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item">
+                                    <a href="/admin/users" class="text-decoration-none">Quản lý Người dùng</a>
+                                </li>
+                                <li class="breadcrumb-item active">Thống kê</li>
+                            </ol>
+                        </nav>
+                        <h1 class="h3 mb-0 text-gray-800">Thống kê Người dùng</h1>
+                    </div>
+                    <div>
+                        <button class="btn btn-success btn-sm" onclick="UserStatsManager.exportStats()">
+                            <i class="fas fa-download me-1"></i>Xuất báo cáo
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="window.history.back()">
+                            <i class="fas fa-arrow-left me-1"></i>Quay lại
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading indicator -->
+                <div id="loadingIndicator" class="text-center py-5">
+                    <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+                    <p class="mt-2">Đang tải thống kê...</p>
+                </div>
+
+                <!-- Stats Content -->
+                <div id="statsContent" style="display: none;">
+                    <!-- Overview Stats Cards -->
+                    <div class="row mb-4" id="overviewStats">
+                        <!-- Stats cards will be loaded here -->
+                    </div>
+
+                    <!-- Charts Row -->
+                    <div class="row mb-4">
+                        <!-- User Registration Chart -->
+                        <div class="col-xl-8">
+                            <div class="card shadow mb-4">
+                                <div class="card-header py-3">
+                                    <h6 class="m-0 font-weight-bold text-primary">Đăng ký người dùng theo tháng (${new Date().getFullYear()})</h6>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="registrationChart" height="80"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- User Status Chart -->
+                        <div class="col-xl-4">
+                            <div class="card shadow mb-4">
+                                <div class="card-header py-3">
+                                    <h6 class="m-0 font-weight-bold text-primary">Phân bố trạng thái</h6>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="statusChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Role Distribution and Top Users -->
+                    <div class="row mb-4">
+                        <!-- Role Chart -->
+                        <div class="col-xl-4">
+                            <div class="card shadow mb-4">
+                                <div class="card-header py-3">
+                                    <h6 class="m-0 font-weight-bold text-primary">Phân bố vai trò</h6>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="roleChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Top Users -->
+                        <div class="col-xl-8">
+                            <div class="card shadow mb-4">
+                                <div class="card-header py-3">
+                                    <h6 class="m-0 font-weight-bold text-primary">Top khách hàng (theo số đơn hàng)</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="topUsersList">
+                                        <!-- Top users list will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activities -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card shadow mb-4">
+                                <div class="card-header py-3">
+                                    <h6 class="m-0 font-weight-bold text-primary">Hoạt động gần đây</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="recentActivities">
+                                        <!-- Recent activities will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error State -->
+                <div id="errorState" class="text-center py-5" style="display: none;">
+                    <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                    <h5 class="text-muted">Không thể tải thống kê</h5>
+                    <p class="text-muted" id="errorMessage">Có lỗi xảy ra khi tải dữ liệu</p>
+                    <button class="btn btn-primary" onclick="UserStatsManager.loadStats()">
+                        <i class="fas fa-refresh me-1"></i>Thử lại
+                    </button>
+                </div>
+            `;
+
+            // Initialize user stats functionality
+            initializeUserStats();
+        }
+
+        // Initialize user stats after content is loaded
+        function initializeUserStats() {
+            console.log('Initializing user stats...');
+
+            // Create UserStatsManager and load data
+            window.UserStatsManager = new UserStatsManager();
+            window.UserStatsManager.loadStats();
+        }
+
+        // User Stats Manager Class
+        class UserStatsManager {
+            constructor() {
+                this.charts = {};
+                this.api = window.AdminUserAPI;
+            }
+
+            // Load user stats
+            async loadStats() {
+                try {
+                    console.log('Loading user stats...');
+
+                    // Show loading
+                    document.getElementById('loadingIndicator').style.display = 'block';
+                    document.getElementById('statsContent').style.display = 'none';
+                    document.getElementById('errorState').style.display = 'none';
+
+                    // Make real API call
+                    const response = await this.api.getUserStats();
+
+                    if (response && response.success) {
+                        this.renderStats(response.data);
+                        document.getElementById('statsContent').style.display = 'block';
+                    } else {
+                        this.showErrorState(response?.message || 'Không thể tải thống kê');
+                    }
+
+                } catch (error) {
+                    console.error('Error loading user stats:', error);
+                    this.showErrorState('Có lỗi xảy ra khi tải dữ liệu');
+                } finally {
+                    document.getElementById('loadingIndicator').style.display = 'none';
+                }
+            }
+
+
+            // Render stats
+            async renderStats(data) {
+                this.renderOverviewCards(data);
+                this.renderRegistrationChart(data.monthlyRegistrations || []);
+                this.renderStatusChart(data);
+                this.renderRoleChart(data);
+
+                // Load top users separately
+                await this.loadAndRenderTopUsers();
+                this.renderRecentActivities();
+            }
+
+            // Load and render top users
+            async loadAndRenderTopUsers() {
+                try {
+                    const response = await this.api.getTopUsersByOrders(0, 5);
+                    if (response.success) {
+                        this.renderTopUsers(response.data.content || []);
+                    } else {
+                        this.renderTopUsers([]);
+                    }
+                } catch (error) {
+                    console.error('Error loading top users:', error);
+                    this.renderTopUsers([]);
+                }
+            }
+
+            // Render overview cards
+            renderOverviewCards(data) {
+                document.getElementById('overviewStats').innerHTML = `
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card border-left-primary shadow h-100 py-2">
+                            <div class="card-body">
+                                <div class="row no-gutters align-items-center">
+                                    <div class="col mr-2">
+                                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                            Tổng số người dùng</div>
+                                        <div class="h5 mb-0 font-weight-bold text-gray-800">${data.totalUsers.toLocaleString()}</div>
+                                    </div>
+                                    <div class="col-auto">
+                                        <i class="fas fa-users fa-2x text-gray-300"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card border-left-success shadow h-100 py-2">
+                            <div class="card-body">
+                                <div class="row no-gutters align-items-center">
+                                    <div class="col mr-2">
+                                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                            Người dùng hoạt động</div>
+                                        <div class="h5 mb-0 font-weight-bold text-gray-800">${data.activeCount.toLocaleString()}</div>
+                                    </div>
+                                    <div class="col-auto">
+                                        <i class="fas fa-user-check fa-2x text-gray-300"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card border-left-warning shadow h-100 py-2">
+                            <div class="card-body">
+                                <div class="row no-gutters align-items-center">
+                                    <div class="col mr-2">
+                                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                            Tài khoản bị khóa</div>
+                                        <div class="h5 mb-0 font-weight-bold text-gray-800">${data.blockedCount.toLocaleString()}</div>
+                                    </div>
+                                    <div class="col-auto">
+                                        <i class="fas fa-user-lock fa-2x text-gray-300"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card border-left-info shadow h-100 py-2">
+                            <div class="card-body">
+                                <div class="row no-gutters align-items-center">
+                                    <div class="col mr-2">
+                                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                            Tỷ lệ hoạt động</div>
+                                        <div class="row no-gutters align-items-center">
+                                            <div class="col-auto">
+                                                <div class="h5 mb-0 mr-3 font-weight-bold text-gray-800">
+                                                    ${((data.activeCount / data.totalUsers) * 100).toFixed(1)}%
+                                                </div>
+                                            </div>
+                                            <div class="col">
+                                                <div class="progress progress-sm mr-2">
+                                                    <div class="progress-bar bg-info" role="progressbar"
+                                                         style="width: ${(data.activeCount / data.totalUsers) * 100}%"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-auto">
+                                        <i class="fas fa-chart-pie fa-2x text-gray-300"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Render registration chart
+            renderRegistrationChart(monthlyData) {
+                const ctx = document.getElementById('registrationChart').getContext('2d');
+
+                if (this.charts.registration) {
+                    this.charts.registration.destroy();
+                }
+
+                const months = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+                               'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
+
+                const data = new Array(12).fill(0);
+                monthlyData.forEach(item => {
+                    data[item.month - 1] = item.count;
+                });
+
+                this.charts.registration = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: months,
+                        datasets: [{
+                            label: 'Số người đăng ký',
+                            data: data,
+                            borderColor: 'rgb(78, 115, 223)',
+                            backgroundColor: 'rgba(78, 115, 223, 0.1)',
+                            tension: 0.3,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: 0
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Render status chart
+            renderStatusChart(data) {
+                const ctx = document.getElementById('statusChart').getContext('2d');
+
+                if (this.charts.status) {
+                    this.charts.status.destroy();
+                }
+
+                this.charts.status = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Hoạt động', 'Bị khóa'],
+                        datasets: [{
+                            data: [data.activeCount, data.blockedCount],
+                            backgroundColor: ['#28a745', '#ffc107'],
+                            hoverBackgroundColor: ['#218838', '#e0a800']
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    boxWidth: 12,
+                                    padding: 15
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Render role chart
+            renderRoleChart(data) {
+                const ctx = document.getElementById('roleChart').getContext('2d');
+
+                if (this.charts.role) {
+                    this.charts.role.destroy();
+                }
+
+                this.charts.role = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Người dùng', 'Quản trị viên'],
+                        datasets: [{
+                            data: [data.userCount, data.adminCount],
+                            backgroundColor: ['#007bff', '#dc3545'],
+                            hoverBackgroundColor: ['#0056b3', '#c82333']
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    boxWidth: 12,
+                                    padding: 15
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Render top users
+            renderTopUsers(topUsers) {
+                if (!topUsers || topUsers.length === 0) {
+                    document.getElementById('topUsersList').innerHTML = `
+                        <div class="text-center py-3">
+                            <i class="fas fa-users fa-2x text-muted mb-2"></i>
+                            <p class="text-muted">Chưa có dữ liệu top khách hàng</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                document.getElementById('topUsersList').innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Thứ hạng</th>
+                                    <th>Tên</th>
+                                    <th>Email</th>
+                                    <th>Số đơn hàng</th>
+                                    <th>Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${topUsers.map((user, index) => `
+                                    <tr>
+                                        <td>
+                                            <span class="badge bg-${index === 0 ? 'warning' : index === 1 ? 'secondary' : index === 2 ? 'dark' : 'light text-dark'}">
+                                                #${index + 1}
+                                            </span>
+                                        </td>
+                                        <td>${user.fullName || user.username || '-'}</td>
+                                        <td>${user.email}</td>
+                                        <td>
+                                            <span class="badge bg-primary">${user.orderCount || 0}</span>
+                                        </td>
+                                        <td>
+                                            <a href="/admin/users/detail?id=${user.id}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            // Render recent activities (mock data)
+            renderRecentActivities() {
+                document.getElementById('recentActivities').innerHTML = `
+                    <div class="timeline">
+                        <div class="d-flex mb-3">
+                            <div class="flex-shrink-0">
+                                <div class="bg-success rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <i class="fas fa-user-plus text-white" style="font-size: 12px;"></i>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <p class="mb-1">5 người dùng mới đăng ký tài khoản</p>
+                                <small class="text-muted">2 giờ trước</small>
+                            </div>
+                        </div>
+                        <div class="d-flex mb-3">
+                            <div class="flex-shrink-0">
+                                <div class="bg-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <i class="fas fa-user-lock text-white" style="font-size: 12px;"></i>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <p class="mb-1">2 tài khoản bị khóa do vi phạm chính sách</p>
+                                <small class="text-muted">4 giờ trước</small>
+                            </div>
+                        </div>
+                        <div class="d-flex mb-3">
+                            <div class="flex-shrink-0">
+                                <div class="bg-info rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <i class="fas fa-chart-line text-white" style="font-size: 12px;"></i>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <p class="mb-1">Tỷ lệ người dùng hoạt động tăng 5% so với tuần trước</p>
+                                <small class="text-muted">1 ngày trước</small>
+                            </div>
+                        </div>
+                        <div class="d-flex">
+                            <div class="flex-shrink-0">
+                                <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <i class="fas fa-users text-white" style="font-size: 12px;"></i>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <p class="mb-1">Đạt mốc 1,000 người dùng hoạt động</p>
+                                <small class="text-muted">3 ngày trước</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Show error state
+            showErrorState(message) {
+                document.getElementById('errorMessage').textContent = message;
+                document.getElementById('errorState').style.display = 'block';
+            }
+
+            // Export stats
+            async exportStats() {
+                console.log('Exporting user stats');
+                const response = await this.api.exportUsers();
+                if (response.success) {
+                    this.api.showSuccessMessage(response.message);
+                } else {
+                    this.api.showErrorMessage(response.message);
+                }
+            }
+        }
+
+        // Initialize page when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load axios first, then user-api.js
+            const axiosScript = document.createElement('script');
+            axiosScript.src = 'https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js';
+            axiosScript.onload = function() {
+                console.log('axios loaded successfully');
+
+                // Now load user-api.js
+                const apiScript = document.createElement('script');
+                apiScript.src = '/js/admin/user-api.js';
+                apiScript.onload = function() {
+                    console.log('user-api.js loaded successfully');
+                    loadLayoutWithScripts('/admin/layouts/app.html', loadUserStatsContent, 'users');
+                };
+                apiScript.onerror = function() {
+                    console.error('Failed to load user-api.js');
+                    alert('Không thể tải API script. Vui lòng thử lại.');
+                };
+                document.head.appendChild(apiScript);
+            };
+            axiosScript.onerror = function() {
+                console.error('Failed to load axios');
+                alert('Không thể tải axios. Vui lòng thử lại.');
+            };
+            document.head.appendChild(axiosScript);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electronic Store - Premium Electronics</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link th:href="@{/css/appuser.css}" rel="stylesheet">
+
+</head>
+<body class="premium-theme">
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg premium-navbar">
+    <div class="container">
+        <a class="navbar-brand premium-brand" href="/user/home">
+            <div class="brand-icon">
+                <i class="fas fa-bolt"></i>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">ElectroTech</span>
+                <span class="brand-subtitle">Premium Electronics</span>
+            </div>
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <div class="navbar-nav premium-nav me-auto ms-5">
+                <a class="nav-link premium-nav-link restricted-link" href="/user/products">
+                    <i class="fas fa-microchip me-2"></i>Sản phẩm
+                </a>
+                <a class="nav-link premium-nav-link" href="/user/contact">
+                    <i class="fas fa-headset me-2"></i>Hỗ trợ
+                </a>
+            </div>
+
+            <div class="navbar-nav premium-actions ms-auto">
+                <a class="nav-link premium-action-link position-relative me-3 restricted-link" href="/user/cart">
+                    <div class="action-icon">
+                        <i class="fas fa-shopping-bag"></i>
+                        <span id="cartCounter" class="action-badge" style="display: none;">0</span>
+                    </div>
+                </a>
+                <a class="nav-link premium-action-link position-relative me-3 restricted-link" href="/user/wishlist">
+                    <div class="action-icon">
+                        <i class="fas fa-heart"></i>
+                        <span id="wishlistCounter" class="action-badge" style="display: none;">0</span>
+                    </div>
+                </a>
+                <div id="userAuthSection" class="premium-user-dropdown">
+                    <!-- Content will be dynamically loaded by AuthUI.js -->
+                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- Main Content -->
+<main class="premium-main" id="pageContent">
+    <!-- Universal Skeleton Loading Placeholder -->
+    <div class="skeleton-container" id="skeletonLoader">
+        <div class="skeleton-content">
+            <div class="container">
+                <!-- Simple breadcrumb skeleton -->
+                <div class="skeleton-breadcrumb-simple">
+                    <div class="skeleton-breadcrumb-dot"></div>
+                    <div class="skeleton-breadcrumb-dot"></div>
+                    <div class="skeleton-breadcrumb-dot"></div>
+                </div>
+
+                <!-- Universal content blocks -->
+                <div class="skeleton-content-area">
+                    <div class="skeleton-block large"></div>
+                    <div class="skeleton-block-group">
+                        <div class="skeleton-block medium"></div>
+                        <div class="skeleton-block medium"></div>
+                    </div>
+                    <div class="skeleton-block small"></div>
+                    <div class="skeleton-block-group">
+                        <div class="skeleton-block small"></div>
+                        <div class="skeleton-block small"></div>
+                        <div class="skeleton-block small"></div>
+                    </div>
+                    <div class="skeleton-block medium"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Page content will be loaded here -->
+</main>
+
+<!-- Footer -->
+<footer class="bg-dark text-light pt-5 pb-4 mt-5">
+    <div class="container">
+        <div class="row">
+            <!-- Logo & Description -->
+            <div class="col-lg-3 col-md-6 mb-4">
+                <div class="mb-3">
+                    <h5 class="text-white">
+                        <i class="fas fa-laptop me-2 text-primary"></i>Electronic Store
+                    </h5>
+                    <p class="text-muted small">
+                        Chuyên cung cấp phụ kiện máy tính chính hãng với chất lượng tốt nhất và giá cả hợp lý.
+                        Đồng hành cùng công nghệ hiện đại.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="col-lg-2 col-md-6 mb-4">
+                <h6 class="text-white mb-3">Điều hướng</h6>
+                <ul class="list-unstyled">
+                    <li class="mb-2">
+                        <a href="/user/home" class="text-muted text-decoration-none hover-link">
+                            <i class="fas fa-home me-2"></i>Trang chủ
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="/user/products" class="text-muted text-decoration-none hover-link">
+                            <i class="fas fa-box me-2"></i>Sản phẩm
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" class="text-muted text-decoration-none hover-link">
+                            <i class="fas fa-info-circle me-2"></i>Giới thiệu
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="/user/faq" class="text-muted text-decoration-none hover-link">
+                            <i class="fas fa-question-circle me-2"></i>FAQ
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="/user/contact" class="text-muted text-decoration-none hover-link">
+                            <i class="fas fa-envelope me-2"></i>Liên hệ
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Services -->
+            <div class="col-lg-2 col-md-6 mb-4">
+                <h6 class="text-white mb-3">Dịch vụ</h6>
+                <ul class="list-unstyled">
+                    <li class="mb-2">
+                        <a href="#" class="text-muted text-decoration-none hover-link">
+                            <i class="fas fa-shipping-fast me-2"></i>Giao hàng nhanh
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" class="text-muted text-decoration-none hover-link">
+                            <i class="fas fa-shield-alt me-2"></i>Bảo hành chính hãng
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" class="text-muted text-decoration-none hover-link">
+                            <i class="fas fa-headset me-2"></i>Hỗ trợ 24/7
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" class="text-muted text-decoration-none hover-link">
+                            <i class="fas fa-undo me-2"></i>Đổi trả dễ dàng
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Contact Info -->
+            <div class="col-lg-3 col-md-6 mb-4">
+                <h6 class="text-white mb-3">Thông tin liên hệ</h6>
+                <ul class="list-unstyled">
+                    <li class="mb-2">
+                        <i class="fas fa-map-marker-alt me-2 text-primary"></i>
+                        <span class="text-muted">123 Đường ABC, Quận XYZ, TP.HCM</span>
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-phone me-2 text-primary"></i>
+                        <a href="tel:0123456789" class="text-muted text-decoration-none hover-link">0123 456 789</a>
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-envelope me-2 text-primary"></i>
+                        <a href="mailto:info@electronicstore.com" class="text-muted text-decoration-none hover-link">info@electronicstore.com</a>
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-clock me-2 text-primary"></i>
+                        <span class="text-muted">8:00 - 22:00 (T2-CN)</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Social Media -->
+            <div class="col-lg-2 col-md-6 mb-4">
+                <h6 class="text-white mb-3">Kết nối với chúng tôi</h6>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="#" class="btn btn-outline-primary btn-sm social-btn" title="Facebook">
+                        <i class="fab fa-facebook-f"></i>
+                    </a>
+                    <a href="#" class="btn btn-outline-danger btn-sm social-btn" title="YouTube">
+                        <i class="fab fa-youtube"></i>
+                    </a>
+                    <a href="#" class="btn btn-outline-dark btn-sm social-btn" title="TikTok">
+                        <i class="fab fa-tiktok"></i>
+                    </a>
+                    <a href="#" class="btn btn-outline-gradient btn-sm social-btn" title="Instagram">
+                        <i class="fab fa-instagram"></i>
+                    </a>
+                    <a href="#" class="btn btn-outline-info btn-sm social-btn" title="LinkedIn">
+                        <i class="fab fa-linkedin-in"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Bottom -->
+        <div class="row mt-4 pt-4 border-top border-secondary">
+            <div class="col-md-8 mb-2">
+                <p class="text-muted mb-0">
+                    <small>
+                        © 2025 Electronic Store. All rights reserved. |
+                        <a href="#" class="text-muted text-decoration-none hover-link">Điều khoản sử dụng</a> |
+                        <a href="#" class="text-muted text-decoration-none hover-link">Chính sách bảo mật</a>
+                    </small>
+                </p>
+            </div>
+            <div class="col-md-4 text-md-end">
+                <p class="text-muted mb-0">
+                    <small>
+                        <i class="fas fa-heart text-danger"></i> Developed with love by Electronic Store Team
+                    </small>
+                </p>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<!-- Modal yêu cầu đăng nhập -->
+<div class="modal fade" id="loginRequiredModal" tabindex="-1" aria-labelledby="loginRequiredModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content premium-dropdown">
+            <div class="modal-header">
+                <h5 class="modal-title" id="loginRequiredModalLabel">Yêu cầu đăng nhập</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Bạn cần đăng nhập để truy cập tính năng này. Vui lòng đăng nhập hoặc đăng ký tài khoản.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                <a href="/auth/register" class="btn btn-outline-primary">Đăng ký</a>
+                <a href="/auth/login" class="btn btn-primary">Đăng nhập</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+<!-- Load auth.js first (base authentication utilities) -->
+<script src="/js/auth.js"></script>
+
+<!-- Load AuthUI.js (handles dynamic UI rendering) -->
+<script src="/js/AuthUI.js"></script>
+
+<!-- Load other services -->
+<script src="/js/CartService.js"></script>
+<script src="/js/cart.js"></script>
+<script src="/js/wishlist.js"></script>
+
+</body>
+</html>

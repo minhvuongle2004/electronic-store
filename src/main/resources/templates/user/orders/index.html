@@ -1,0 +1,1826 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lịch sử đặt hàng - Electronic Store</title>
+    <!-- Load Bootstrap and required libraries first -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        let currentPage = 0;
+        let currentStatus = 'all';
+        let totalPages = 0;
+
+        // Enhanced function to load user layout with proper script execution
+        async function loadLayoutWithScripts(layoutUrl, contentLoader, activeNavPage) {
+            try {
+                console.log('Loading user layout...');
+
+                // Fetch the user layout
+                const response = await fetch(layoutUrl);
+                const layoutHtml = await response.text();
+
+                // Create a temporary container to parse the HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+
+                // Extract and execute scripts manually
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout into container
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually to ensure they run
+                const scriptsToLoad = [];
+                scripts.forEach(script => {
+                    if (script.src) {
+                        // Check if the script functionality is actually available
+                        const srcPath = script.src.includes('://') ? script.src : new URL(script.src, window.location.origin).href;
+                        let shouldLoad = true;
+
+                        // Special checks for specific libraries
+                        if (script.src.includes('bootstrap')) {
+                            shouldLoad = typeof bootstrap === 'undefined';
+                        } else if (script.src.includes('axios')) {
+                            shouldLoad = typeof axios === 'undefined';
+                        } else {
+                            shouldLoad = !document.querySelector(`script[src="${srcPath}"]`) && !document.querySelector(`script[src="${script.src}"]`);
+                        }
+
+                        if (shouldLoad) {
+                            scriptsToLoad.push(script);
+                        } else {
+                            console.log('Script already loaded, skipping:', script.src);
+                        }
+                    } else {
+                        // Inline script - always add but with hash check
+                        const scriptContent = script.textContent.trim();
+                        if (scriptContent) {
+                            const hash = scriptContent.length + '_' + scriptContent.substring(0, 10).replace(/[^a-zA-Z0-9]/g, '');
+                            if (!document.querySelector(`script[data-inline-hash="${hash}"]`)) {
+                                scriptsToLoad.push(script);
+                            }
+                        }
+                    }
+                });
+
+                // Load scripts sequentially to ensure proper initialization
+                let loadedCount = 0;
+                function loadNextScript() {
+                    if (loadedCount >= scriptsToLoad.length) {
+                        initializeAfterScriptsLoaded();
+                        return;
+                    }
+
+                    const script = scriptsToLoad[loadedCount];
+                    if (script.src) {
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        newScript.onload = () => {
+                            console.log('External script loaded:', script.src);
+                            loadedCount++;
+                            loadNextScript();
+                        };
+                        newScript.onerror = () => {
+                            console.error('Failed to load script:', script.src);
+                            loadedCount++;
+                            loadNextScript();
+                        };
+                        document.head.appendChild(newScript);
+                    } else {
+                        const scriptContent = script.textContent.trim();
+                        if (scriptContent) {
+                            // Execute inline script properly
+                            try {
+                                // Use Function constructor for better error handling and scope
+                                const scriptFunction = new Function(scriptContent);
+                                scriptFunction();
+                                console.log('Inline script executed successfully');
+                            } catch (error) {
+                                console.error('Error executing inline script:', error);
+                                // Fallback to eval if Function constructor fails
+                                try {
+                                    eval(scriptContent);
+                                    console.log('Inline script executed via eval fallback');
+                                } catch (evalError) {
+                                    console.error('Error in eval fallback:', evalError);
+                                }
+                            }
+                        }
+                        loadedCount++;
+                        setTimeout(loadNextScript, 10); // Small delay for inline scripts
+                    }
+                }
+
+                loadNextScript();
+
+                function initializeAfterScriptsLoaded() {
+                    // Wait a bit for all scripts to initialize
+                    setTimeout(() => {
+                        console.log('Initializing after all scripts loaded');
+
+                        // Check if Bootstrap is available
+                        if (typeof bootstrap !== 'undefined') {
+                            // Initialize Bootstrap dropdowns
+                            const dropdownElementList = document.querySelectorAll('.dropdown-toggle');
+                            const dropdownList = [...dropdownElementList].map(dropdownToggleEl => {
+                                return new bootstrap.Dropdown(dropdownToggleEl);
+                            });
+                            console.log('Bootstrap dropdowns initialized:', dropdownList.length);
+                        } else {
+                            console.error('Bootstrap not available');
+                        }
+
+                        // Set active navigation if specified
+                        if (activeNavPage) {
+                            const navLinks = document.querySelectorAll('.premium-nav-link');
+                            navLinks.forEach(link => {
+                                if (link.getAttribute('href').includes(activeNavPage)) {
+                                    link.classList.add('active');
+                                }
+                            });
+                        }
+
+                        // Setup logout button manually
+                        const logoutBtn = document.getElementById('logoutBtn');
+                        if (logoutBtn && window.Auth) {
+                            logoutBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+                                    window.Auth.logout();
+                                }
+                            });
+                            console.log('Logout button handler attached manually');
+                        }
+
+                        // Load page-specific content
+                        if (contentLoader) {
+                            contentLoader();
+                        }
+                    }, 300);
+                }
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load orders page content with premium design
+        function loadOrdersPageContent() {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                pageContent.innerHTML = `
+                    <!-- Orders Page Header -->
+                    <section class="orders-header">
+                        <div class="container">
+                            <!-- Breadcrumb -->
+                            <nav aria-label="breadcrumb" class="premium-breadcrumb">
+                                <ol class="breadcrumb">
+                                    <li class="breadcrumb-item">
+                                        <a href="/user/home">
+                                            <i class="fas fa-home me-1"></i>Trang chủ
+                                        </a>
+                                    </li>
+                                    <li class="breadcrumb-item active" aria-current="page">
+                                        <i class="fas fa-history me-1"></i>Lịch sử đặt hàng
+                                    </li>
+                                </ol>
+                            </nav>
+
+                            <!-- Page Title -->
+                            <div class="orders-title-section">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h1 class="orders-title">
+                                            <span class="title-icon">
+                                                <i class="fas fa-history"></i>
+                                            </span>
+                                            Lịch sử đặt hàng
+                                        </h1>
+                                        <p class="orders-subtitle">
+                                            Theo dõi và quản lý các đơn hàng của bạn
+                                        </p>
+                                    </div>
+                                    <div class="orders-actions">
+                                        <button class="premium-btn premium-btn-refresh" onclick="refreshOrders()">
+                                            <i class="fas fa-sync-alt me-2"></i>Làm mới
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Orders Content Section -->
+                    <section class="orders-content-section">
+                        <div class="container">
+                            <!-- Premium Filter Tabs -->
+                            <div class="premium-filter-tabs">
+                                <div class="filter-tabs-wrapper">
+                                    <button class="premium-filter-tab active" data-status="all">
+                                        <i class="fas fa-list me-2"></i>Tất cả
+                                    </button>
+                                    <button class="premium-filter-tab" data-status="PENDING">
+                                        <i class="fas fa-clock me-2"></i>Chờ xử lý
+                                    </button>
+
+                                    <button class="premium-filter-tab" data-status="SHIPPED">
+                                        <i class="fas fa-shipping-fast me-2"></i>Đang giao
+                                    </button>
+                                    <button class="premium-filter-tab" data-status="COMPLETED">
+                                        <i class="fas fa-check-circle me-2"></i>Hoàn thành
+                                    </button>
+                                    <button class="premium-filter-tab" data-status="CANCELED">
+                                        <i class="fas fa-times-circle me-2"></i>Đã hủy
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Loading Spinner -->
+                            <div id="ordersLoadingSpinner" class="loading-container">
+                                <div class="loading-spinner">
+                                    <div class="spinner"></div>
+                                    <p class="loading-text">Đang tải danh sách đơn hàng...</p>
+                                </div>
+                            </div>
+
+                            <!-- Orders Container -->
+                            <div id="ordersContainer" style="display: none;">
+                                <!-- Orders will be loaded here -->
+                            </div>
+
+                            <!-- Premium Pagination -->
+                            <div id="paginationContainer" class="premium-pagination-container" style="display: none;">
+                                <nav aria-label="Orders pagination">
+                                    <ul class="premium-pagination" id="pagination">
+                                        <!-- Pagination will be generated here -->
+                                    </ul>
+                                </nav>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Premium Order Detail Modal -->
+                    <div class="modal fade" id="orderDetailModal" tabindex="-1" aria-labelledby="orderDetailModalLabel">
+                        <div class="modal-dialog modal-xl">
+                            <div class="modal-content premium-modal-content">
+                                <div class="premium-modal-header">
+                                    <div class="modal-title-wrapper">
+                                        <h3 class="premium-modal-title" id="orderDetailModalLabel">
+                                            <span class="modal-title-icon">
+                                                <i class="fas fa-receipt"></i>
+                                            </span>
+                                            Chi tiết đơn hàng
+                                        </h3>
+                                        <p class="premium-modal-subtitle">Xem thông tin chi tiết về đơn hàng của bạn</p>
+                                    </div>
+                                    <button type="button" class="premium-btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div class="premium-modal-body" id="orderDetailContent">
+                                    <!-- Order detail content will be loaded here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <style>
+                        /* Orders Page Styles with Premium Color Scheme */
+                        :root {
+                            --neutral-900: #121212;  /* Text chính (heading) */
+                            --neutral-700: #2E2E2E;  /* Text body, nhãn phụ */
+                            --neutral-500: #9E9E9E;  /* Placeholder, text phụ */
+                            --neutral-200: #E0E0E0;  /* Border, divider */
+                            --neutral-50: #FAFAFA;   /* Background sáng */
+                            --white: #FFFFFF;        /* Nền chính */
+                            --primary: #3B82F6;      /* Primary color */
+                            --success: #10B981;      /* Success color */
+                            --warning: #F59E0B;      /* Warning color */
+                            --danger: #EF4444;       /* Danger color */
+                            --info: #06B6D4;         /* Info color */
+                        }
+
+                        /* Orders Header */
+                        .orders-header {
+                            padding: 40px 0 60px;
+                            background: linear-gradient(135deg, var(--neutral-50) 0%, #F8FAFC 100%);
+                            border-bottom: 1px solid var(--neutral-200);
+                        }
+
+                        .premium-breadcrumb {
+                            margin-bottom: 32px;
+                        }
+
+                        .premium-breadcrumb .breadcrumb {
+                            background: none;
+                            padding: 0;
+                            margin: 0;
+                            font-size: 14px;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item {
+                            font-weight: 500;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item a {
+                            color: var(--neutral-500);
+                            text-decoration: none;
+                            transition: color 0.3s ease;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item a:hover {
+                            color: var(--primary);
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item.active {
+                            color: var(--neutral-700);
+                            font-weight: 600;
+                        }
+
+                        .orders-title-section {
+                            margin-bottom: 0;
+                        }
+
+                        .orders-title {
+                            font-size: 2.5rem;
+                            font-weight: 700;
+                            color: var(--neutral-900);
+                            margin-bottom: 12px;
+                            display: flex;
+                            align-items: center;
+                            letter-spacing: -0.025em;
+                        }
+
+                        .title-icon {
+                            width: 56px;
+                            height: 56px;
+                            background: linear-gradient(135deg, var(--info), #0EA5E9);
+                            border-radius: 14px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-right: 16px;
+                            color: var(--white);
+                            font-size: 24px;
+                        }
+
+                        .orders-subtitle {
+                            font-size: 1.125rem;
+                            color: var(--neutral-700);
+                            margin: 0;
+                        }
+
+                        .orders-actions {
+                            display: flex;
+                            gap: 12px;
+                            align-items: center;
+                        }
+
+                        .premium-btn {
+                            padding: 12px 24px;
+                            border-radius: 8px;
+                            font-weight: 600;
+                            font-size: 14px;
+                            border: none;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            display: inline-flex;
+                            align-items: center;
+                            justify-content: center;
+                            text-decoration: none;
+                        }
+
+                        .premium-btn-refresh {
+                            background: linear-gradient(135deg, var(--primary), #8B5CF6);
+                            color: var(--white);
+                        }
+
+                        .premium-btn-refresh:hover {
+                            transform: translateY(-1px);
+                            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                            color: var(--white);
+                        }
+
+                        /* Content Section */
+                        .orders-content-section {
+                            padding: 60px 0;
+                            background: var(--white);
+                        }
+
+                        /* Premium Filter Tabs */
+                        .premium-filter-tabs {
+                            margin-bottom: 40px;
+                        }
+
+                        .filter-tabs-wrapper {
+                            display: flex;
+                            gap: 8px;
+                            padding: 6px;
+                            background: var(--neutral-50);
+                            border-radius: 12px;
+                            overflow-x: auto;
+                        }
+
+                        .premium-filter-tab {
+                            padding: 12px 20px;
+                            background: transparent;
+                            border: none;
+                            border-radius: 8px;
+                            color: var(--neutral-500);
+                            font-weight: 600;
+                            font-size: 14px;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            white-space: nowrap;
+                            display: flex;
+                            align-items: center;
+                        }
+
+                        .premium-filter-tab:hover {
+                            background: var(--white);
+                            color: var(--neutral-700);
+                            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+                        }
+
+                        .premium-filter-tab.active {
+                            background: var(--primary);
+                            color: var(--white);
+                            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                        }
+
+                        /* Loading Styles */
+                        .loading-container {
+                            padding: 80px 0;
+                            text-align: center;
+                        }
+
+                        .loading-spinner {
+                            display: inline-flex;
+                            flex-direction: column;
+                            align-items: center;
+                            gap: 16px;
+                        }
+
+                        .spinner {
+                            width: 40px;
+                            height: 40px;
+                            border: 3px solid var(--neutral-200);
+                            border-top: 3px solid var(--info);
+                            border-radius: 50%;
+                            animation: spin 1s linear infinite;
+                        }
+
+                        @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+
+                        .loading-text {
+                            color: var(--neutral-500);
+                            font-size: 14px;
+                            margin: 0;
+                        }
+
+                        /* Premium Order Cards */
+                        .premium-order-card {
+                            background: var(--white);
+                            border-radius: 16px;
+                            border: 1px solid var(--neutral-200);
+                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                            margin-bottom: 24px;
+                            overflow: hidden;
+                            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                        }
+
+                        .premium-order-card:hover {
+                            transform: translateY(-2px);
+                            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+                            border-color: var(--primary);
+                        }
+
+                        .order-card-header {
+                            padding: 24px 32px;
+                            background: linear-gradient(135deg, var(--neutral-50), #F8FAFC);
+                            border-bottom: 1px solid var(--neutral-200);
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                        }
+
+                        .order-id {
+                            font-size: 1.125rem;
+                            font-weight: 700;
+                            color: var(--neutral-900);
+                            font-family: 'JetBrains Mono', monospace;
+                        }
+
+                        .order-card-body {
+                            padding: 32px;
+                        }
+
+                        .order-info-grid {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                            gap: 24px;
+                            margin-bottom: 24px;
+                        }
+
+                        .order-info-item {
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                        }
+
+                        .order-info-icon {
+                            width: 40px;
+                            height: 40px;
+                            background: linear-gradient(135deg, var(--neutral-50), var(--neutral-200));
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: var(--neutral-500);
+                            font-size: 16px;
+                        }
+
+                        .order-info-content {
+                            flex: 1;
+                        }
+
+                        .order-info-label {
+                            font-size: 12px;
+                            color: var(--neutral-500);
+                            font-weight: 500;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                        }
+
+                        .order-info-value {
+                            font-size: 14px;
+                            color: var(--neutral-900);
+                            font-weight: 600;
+                            margin-top: 2px;
+                        }
+
+                        .order-total {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            padding: 20px 32px;
+                            background: linear-gradient(135deg, var(--neutral-50), #F8FAFC);
+                            border-top: 1px solid var(--neutral-200);
+                        }
+
+                        .order-total-label {
+                            font-size: 1rem;
+                            font-weight: 600;
+                            color: var(--neutral-700);
+                        }
+
+                        .order-total-value {
+                            font-size: 1.5rem;
+                            font-weight: 700;
+                            color: var(--primary);
+                            font-family: 'JetBrains Mono', monospace;
+                        }
+
+                        .order-actions {
+                            display: flex;
+                            gap: 12px;
+                            align-items: center;
+                        }
+
+                        .premium-btn-sm {
+                            padding: 8px 16px;
+                            font-size: 12px;
+                        }
+
+                        .premium-btn-outline {
+                            background: transparent;
+                            color: var(--primary);
+                            border: 1px solid var(--primary);
+                        }
+
+                        .premium-btn-outline:hover {
+                            background: var(--primary);
+                            color: var(--white);
+                        }
+
+                        .premium-btn-danger {
+                            background: transparent;
+                            color: var(--danger);
+                            border: 1px solid var(--danger);
+                        }
+
+                        .premium-btn-danger:hover {
+                            background: var(--danger);
+                            color: var(--white);
+                        }
+
+                        /* Status Badges */
+                        .premium-status-badge {
+                            padding: 6px 12px;
+                            border-radius: 20px;
+                            font-size: 11px;
+                            font-weight: 700;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 6px;
+                        }
+
+                        .status-pending {
+                            background: rgba(245, 158, 11, 0.1);
+                            color: var(--warning);
+                        }
+
+                        .status-paid {
+                            background: rgba(16, 185, 129, 0.1);
+                            color: var(--success);
+                        }
+
+                        .status-shipped {
+                            background: rgba(59, 130, 246, 0.1);
+                            color: var(--primary);
+                        }
+
+                        .status-completed {
+                            background: rgba(16, 185, 129, 0.1);
+                            color: var(--success);
+                        }
+
+                        .status-canceled {
+                            background: rgba(239, 68, 68, 0.1);
+                            color: var(--danger);
+                        }
+
+                        /* Promotion Badge */
+                        .promotion-badge {
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 6px;
+                            padding: 4px 8px;
+                            background: rgba(16, 185, 129, 0.1);
+                            color: var(--success);
+                            border-radius: 12px;
+                            font-size: 12px;
+                            font-weight: 600;
+                        }
+
+                        /* Premium Pagination */
+                        .premium-pagination-container {
+                            display: flex;
+                            justify-content: center;
+                            margin-top: 60px;
+                        }
+
+                        .premium-pagination {
+                            display: flex;
+                            gap: 8px;
+                            list-style: none;
+                            margin: 0;
+                            padding: 0;
+                        }
+
+                        .premium-pagination .page-item {
+                            margin: 0;
+                        }
+
+                        .premium-pagination .page-link {
+                            padding: 12px 16px;
+                            border: 1px solid var(--neutral-200);
+                            border-radius: 8px;
+                            color: var(--neutral-700);
+                            text-decoration: none;
+                            font-weight: 600;
+                            transition: all 0.3s ease;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            min-width: 48px;
+                        }
+
+                        .premium-pagination .page-link:hover {
+                            background: var(--primary);
+                            color: var(--white);
+                            border-color: var(--primary);
+                        }
+
+                        .premium-pagination .page-item.active .page-link {
+                            background: var(--primary);
+                            color: var(--white);
+                            border-color: var(--primary);
+                            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                        }
+
+                        .premium-pagination .page-item.disabled .page-link {
+                            opacity: 0.5;
+                            cursor: not-allowed;
+                        }
+
+                        .premium-pagination .page-item.disabled .page-link:hover {
+                            background: transparent;
+                            color: var(--neutral-700);
+                            border-color: var(--neutral-200);
+                        }
+
+                        /* Empty State */
+                        .empty-orders {
+                            text-align: center;
+                            padding: 80px 0;
+                        }
+
+                        .empty-orders-icon {
+                            width: 120px;
+                            height: 120px;
+                            background: linear-gradient(135deg, var(--neutral-50), var(--neutral-200));
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0 auto 32px;
+                            color: var(--info);
+                            font-size: 48px;
+                        }
+
+                        .empty-orders-title {
+                            font-size: 1.5rem;
+                            font-weight: 600;
+                            color: var(--neutral-700);
+                            margin-bottom: 12px;
+                        }
+
+                        .empty-orders-text {
+                            color: var(--neutral-500);
+                            margin-bottom: 32px;
+                            font-size: 16px;
+                        }
+
+                        /* Error State */
+                        .error-orders {
+                            text-align: center;
+                            padding: 80px 0;
+                        }
+
+                        .error-orders-icon {
+                            width: 120px;
+                            height: 120px;
+                            background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0 auto 32px;
+                            color: var(--warning);
+                            font-size: 48px;
+                        }
+
+                        .error-orders-title {
+                            font-size: 1.5rem;
+                            font-weight: 600;
+                            color: var(--neutral-700);
+                            margin-bottom: 12px;
+                        }
+
+                        .error-orders-text {
+                            color: var(--neutral-500);
+                            margin-bottom: 32px;
+                            font-size: 16px;
+                        }
+
+                        /* Premium Modal Styles */
+                        .premium-modal-content {
+                            border-radius: 16px;
+                            border: none;
+                            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+                        }
+
+                        .premium-modal-header {
+                            padding: 32px 32px 24px;
+                            background: linear-gradient(135deg, var(--neutral-50), #F8FAFC);
+                            border-bottom: 1px solid var(--neutral-200);
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: flex-start;
+                        }
+
+                        .modal-title-wrapper {
+                            flex: 1;
+                        }
+
+                        .premium-modal-title {
+                            font-size: 1.5rem;
+                            font-weight: 700;
+                            color: var(--neutral-900);
+                            margin-bottom: 8px;
+                            display: flex;
+                            align-items: center;
+                        }
+
+                        .modal-title-icon {
+                            width: 40px;
+                            height: 40px;
+                            background: linear-gradient(135deg, var(--info), #0EA5E9);
+                            border-radius: 10px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-right: 12px;
+                            color: var(--white);
+                            font-size: 16px;
+                        }
+
+                        .premium-modal-subtitle {
+                            color: var(--neutral-500);
+                            font-size: 14px;
+                            margin: 0;
+                        }
+
+                        .premium-btn-close {
+                            width: 40px;
+                            height: 40px;
+                            border: none;
+                            background: var(--white);
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            color: var(--neutral-500);
+                            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                        }
+
+                        .premium-btn-close:hover {
+                            background: var(--danger);
+                            color: var(--white);
+                            transform: scale(1.1);
+                        }
+
+                        .premium-modal-body {
+                            padding: 32px;
+                        }
+
+                        /* Responsive */
+                        @media (max-width: 991.98px) {
+                            .orders-title {
+                                font-size: 2rem;
+                            }
+
+                            .title-icon {
+                                width: 48px;
+                                height: 48px;
+                                font-size: 20px;
+                            }
+
+                            .order-info-grid {
+                                grid-template-columns: 1fr;
+                                gap: 16px;
+                            }
+
+                            .filter-tabs-wrapper {
+                                justify-content: flex-start;
+                                overflow-x: auto;
+                            }
+
+                            .order-card-header,
+                            .order-card-body,
+                            .order-total {
+                                padding: 20px 24px;
+                            }
+                        }
+
+                        @media (max-width: 767.98px) {
+                            .orders-title {
+                                font-size: 1.75rem;
+                                flex-direction: column;
+                                text-align: center;
+                                gap: 12px;
+                            }
+
+                            .orders-title-section .d-flex {
+                                flex-direction: column;
+                                text-align: center;
+                                gap: 24px;
+                            }
+
+                            .orders-actions {
+                                justify-content: center;
+                            }
+
+                            .orders-header {
+                                padding: 32px 0 40px;
+                            }
+
+                            .orders-content-section {
+                                padding: 40px 0;
+                            }
+
+                            .order-card-header,
+                            .order-card-body,
+                            .order-total {
+                                padding: 16px 20px;
+                            }
+
+                            .premium-modal-header,
+                            .premium-modal-body {
+                                padding: 24px;
+                            }
+
+                            .premium-modal-title {
+                                font-size: 1.25rem;
+                            }
+
+                            .modal-title-icon {
+                                width: 36px;
+                                height: 36px;
+                                font-size: 14px;
+                            }
+
+                            .order-actions {
+                                flex-direction: column;
+                                gap: 8px;
+                            }
+                        }
+                    </style>
+                `;
+
+                // Hide skeleton when content is ready
+                if (typeof window.hideSkeleton === 'function') {
+                    window.hideSkeleton();
+                }
+
+                // Initialize orders functionality after content is loaded
+                loadOrders();
+                setupFilterTabs();
+            }
+        }
+
+        // Load layout
+        document.addEventListener('DOMContentLoaded', function() {
+            loadLayoutWithScripts('/user/layouts/app.html', loadOrdersPageContent, 'orders');
+        });
+
+        // Setup premium filter tabs
+        function setupFilterTabs() {
+            const tabs = document.querySelectorAll('.premium-filter-tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Remove active class from all tabs
+                    tabs.forEach(t => t.classList.remove('active'));
+                    // Add active class to clicked tab
+                    this.classList.add('active');
+
+                    // Get status and reload orders
+                    currentStatus = this.dataset.status;
+                    currentPage = 0;
+                    loadOrders();
+                });
+            });
+        }
+
+        // Enhanced load orders function
+        async function loadOrders() {
+            try {
+                showPremiumLoading();
+
+                let url = `/api/user/orders?page=${currentPage}&size=10`;
+                if (currentStatus !== 'all') {
+                    url = `/api/user/orders/status/${currentStatus}?page=${currentPage}&size=10`;
+                }
+
+                const response = await axios.get(url);
+
+                if (response.data.success) {
+                    displayPremiumOrders(response.data.data);
+                    setupPremiumPagination(response.data.data);
+                } else {
+                    showPremiumError(response.data.message || 'Không thể tải danh sách đơn hàng');
+                }
+            } catch (error) {
+                console.error('Error loading orders:', error);
+
+                let errorMessage = 'Lỗi khi tải danh sách đơn hàng';
+
+                if (error.response) {
+                    console.log('Response status:', error.response.status);
+                    console.log('Response data:', error.response.data);
+
+                    if (error.response.data && error.response.data.message) {
+                        errorMessage = error.response.data.message;
+                    } else {
+                        errorMessage = `HTTP ${error.response.status}: ${error.response.statusText}`;
+                    }
+                } else if (error.message) {
+                    errorMessage = error.message;
+                }
+
+                if (error.response && error.response.status === 401) {
+                    showPremiumError('Vui lòng đăng nhập để xem lịch sử đơn hàng');
+                    setTimeout(() => {
+                        window.location.href = '/auth/login';
+                    }, 2000);
+                } else {
+                    showPremiumError(errorMessage);
+                }
+            }
+        }
+
+        // Enhanced display orders with premium design
+        function displayPremiumOrders(orderPage) {
+            const container = document.getElementById('ordersContainer');
+
+            // Hide loading spinner and show container
+            document.getElementById('ordersLoadingSpinner').style.display = 'none';
+            container.style.display = 'block';
+
+            if (orderPage.content.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-orders">
+                        <div class="empty-orders-icon">
+                            <i class="fas fa-receipt"></i>
+                        </div>
+                        <h3 class="empty-orders-title">Không có đơn hàng nào</h3>
+                        <p class="empty-orders-text">
+                            Bạn chưa có đơn hàng nào. Hãy khám phá các sản phẩm tuyệt vời và mua sắm ngay!
+                        </p>
+                        <a href="/user/products" class="premium-btn premium-btn-refresh">
+                            <i class="fas fa-shopping-cart me-2"></i>Mua sắm ngay
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            orderPage.content.forEach(order => {
+                html += createPremiumOrderCard(order);
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Create premium order card HTML
+        function createPremiumOrderCard(order) {
+            const statusClass = `status-${order.status.toLowerCase()}`;
+            const statusText = getStatusText(order.status);
+            const paymentStatusText = getPaymentStatusText(order.paymentStatus);
+            const orderDate = new Date(order.orderDate).toLocaleDateString('vi-VN', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            const orderTime = new Date(order.orderDate).toLocaleTimeString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            const statusIcon = getStatusIcon(order.status);
+            const paymentIcon = getPaymentIcon(order.paymentStatus);
+
+            return `
+                <div class="premium-order-card">
+                    <div class="order-card-header">
+                        <div class="order-id">Đơn hàng #${order.orderId}</div>
+                        <div class="order-actions">
+                            <button class="premium-btn premium-btn-sm premium-btn-outline" onclick="viewOrderDetail('${order.orderId}')">
+                                <i class="fas fa-eye me-1"></i>Xem chi tiết
+                            </button>
+                            ${order.status === 'PENDING' ? `
+                                <button class="premium-btn premium-btn-sm premium-btn-danger" onclick="cancelOrder('${order.orderId}')">
+                                    <i class="fas fa-times me-1"></i>Hủy đơn
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <div class="order-card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <span class="premium-status-badge ${statusClass}">
+                                <i class="${statusIcon}"></i>
+                                ${statusText}
+                            </span>
+                        </div>
+
+                        <div class="order-info-grid">
+                            <div class="order-info-item">
+                                <div class="order-info-icon">
+                                    <i class="fas fa-calendar"></i>
+                                </div>
+                                <div class="order-info-content">
+                                    <div class="order-info-label">Ngày đặt hàng</div>
+                                    <div class="order-info-value">${orderDate} lúc ${orderTime}</div>
+                                </div>
+                            </div>
+
+                            <div class="order-info-item">
+                                <div class="order-info-icon">
+                                    <i class="${paymentIcon}"></i>
+                                </div>
+                                <div class="order-info-content">
+                                    <div class="order-info-label">Trạng thái thanh toán</div>
+                                    <div class="order-info-value">${paymentStatusText}</div>
+                                </div>
+                            </div>
+
+                            ${order.shippingMethod ? `
+                                <div class="order-info-item">
+                                    <div class="order-info-icon">
+                                        <i class="fas fa-shipping-fast"></i>
+                                    </div>
+                                    <div class="order-info-content">
+                                        <div class="order-info-label">Phương thức giao hàng</div>
+                                        <div class="order-info-value">${order.shippingMethod}</div>
+                                    </div>
+                                </div>
+                            ` : ''}
+
+                            ${order.promotionCode ? `
+                                <div class="order-info-item">
+                                    <div class="order-info-icon">
+                                        <i class="fas fa-percent"></i>
+                                    </div>
+                                    <div class="order-info-content">
+                                        <div class="order-info-label">Mã khuyến mãi</div>
+                                        <div class="order-info-value">
+                                            ${order.promotionCode}
+                                            <span class="promotion-badge ms-2">
+                                                <i class="fas fa-minus"></i>
+                                                ${formatCurrency(order.discountAmount || 0)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <div class="order-total">
+                        <div class="order-total-label">Tổng cộng</div>
+                        <div class="order-total-value">${formatCurrency(order.totalPrice)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Helper functions for status and payment icons
+        function getStatusIcon(status) {
+            const iconMap = {
+                'PENDING': 'fas fa-clock',
+                'PAID': 'fas fa-check-circle',
+                'SHIPPED': 'fas fa-shipping-fast',
+                'COMPLETED': 'fas fa-check-circle',
+                'CANCELED': 'fas fa-times-circle'
+            };
+            return iconMap[status] || 'fas fa-info-circle';
+        }
+
+        function getPaymentIcon(paymentStatus) {
+            const iconMap = {
+                'UNPAID': 'fas fa-credit-card',
+                'PAID': 'fas fa-check-circle',
+                'FAILED': 'fas fa-times-circle'
+            };
+            return iconMap[paymentStatus] || 'fas fa-credit-card';
+        }
+
+        // Enhanced setup pagination with premium design
+        function setupPremiumPagination(orderPage) {
+            const container = document.getElementById('paginationContainer');
+            const pagination = document.getElementById('pagination');
+
+            totalPages = orderPage.totalPages;
+
+            if (totalPages <= 1) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'flex';
+            let paginationHtml = '';
+
+            // Previous button
+            paginationHtml += `
+                <li class="page-item ${currentPage === 0 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="goToPage(${currentPage - 1})" ${currentPage === 0 ? 'tabindex="-1" aria-disabled="true"' : ''}>
+                        <i class="fas fa-chevron-left"></i>
+                        Trước
+                    </a>
+                </li>
+            `;
+
+            // Page numbers
+            const startPage = Math.max(0, currentPage - 2);
+            const endPage = Math.min(totalPages - 1, currentPage + 2);
+
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHtml += `
+                    <li class="page-item ${i === currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="goToPage(${i})" ${i === currentPage ? 'aria-current="page"' : ''}>${i + 1}</a>
+                    </li>
+                `;
+            }
+
+            // Next button
+            paginationHtml += `
+                <li class="page-item ${currentPage === totalPages - 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages - 1 ? 'tabindex="-1" aria-disabled="true"' : ''}>
+                        Sau
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            `;
+
+            pagination.innerHTML = paginationHtml;
+        }
+
+        // Go to page
+        function goToPage(page) {
+            if (page < 0 || page >= totalPages || page === currentPage) return;
+
+            currentPage = page;
+            loadOrders();
+        }
+
+        // View order detail
+        async function viewOrderDetail(orderId) {
+            try {
+                const response = await axios.get(`/api/user/orders/${orderId}`);
+
+                if (response.data.success) {
+                    const order = response.data.data;
+                    displayOrderDetail(order);
+                    new bootstrap.Modal(document.getElementById('orderDetailModal')).show();
+                } else {
+                    alert(response.data.message || 'Không thể tải chi tiết đơn hàng');
+                }
+            } catch (error) {
+                console.error('Error loading order detail:', error);
+                alert('Lỗi khi tải chi tiết đơn hàng');
+            }
+        }
+
+        // Enhanced display order detail in premium modal
+        function displayOrderDetail(order) {
+            const container = document.getElementById('orderDetailContent');
+            const orderDate = new Date(order.orderDate).toLocaleDateString('vi-VN', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            const orderTime = new Date(order.orderDate).toLocaleTimeString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const statusClass = `status-${order.status.toLowerCase()}`;
+            const statusText = getStatusText(order.status);
+            const statusIcon = getStatusIcon(order.status);
+
+            let itemsHtml = '';
+            if (order.orderItems && order.orderItems.length > 0) {
+                order.orderItems.forEach(item => {
+                    itemsHtml += `
+                        <div class="premium-order-item">
+                            <div class="row align-items-center">
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-center">
+                                        <div class="product-image-placeholder">
+                                            <i class="fas fa-microchip"></i>
+                                        </div>
+                                        <div class="product-info ms-3">
+                                            <h6 class="product-name">${escapeHtml(item.product.name)}</h6>
+                                            <p class="product-code">Mã SP: #${item.product.id}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2 text-center">
+                                    <div class="quantity-display">
+                                        <span class="quantity-value">${item.quantity}</span>
+                                        <small class="quantity-label">Số lượng</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-2 text-center">
+                                    <div class="price-display">
+                                        <span class="price-value">${formatCurrency(item.price)}</span>
+                                        <small class="price-label">Đơn giá</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-2 text-end">
+                                    <div class="total-display">
+                                        <span class="total-value">${formatCurrency(item.price * item.quantity)}</span>
+                                        <small class="total-label">Thành tiền</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            container.innerHTML = `
+                <div class="premium-modal-section">
+                    <div class="section-header">
+                        <h4 class="section-title">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Thông tin đơn hàng
+                        </h4>
+                        <span class="premium-status-badge ${statusClass}">
+                            <i class="${statusIcon}"></i>
+                            ${statusText}
+                        </span>
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="info-card">
+                                <h6 class="info-card-title">Chi tiết đơn hàng</h6>
+                                <div class="info-list">
+                                    <div class="info-item">
+                                        <span class="info-label">Mã đơn hàng</span>
+                                        <span class="info-value order-id">#${order.orderId}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-label">Ngày đặt hàng</span>
+                                        <span class="info-value">${orderDate} lúc ${orderTime}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-label">Phương thức thanh toán</span>
+                                        <span class="info-value">${order.paymentMethod || 'Không xác định'}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-label">Trạng thái thanh toán</span>
+                                        <span class="info-value">${getPaymentStatusText(order.paymentStatus)}</span>
+                                    </div>
+                                    ${order.promotionCode ? `
+                                        <div class="info-item">
+                                            <span class="info-label">Mã khuyến mãi</span>
+                                            <span class="info-value">
+                                                <span class="promotion-badge">
+                                                    <i class="fas fa-percent me-1"></i>
+                                                    ${order.promotionCode}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-label">Số tiền giảm</span>
+                                            <span class="info-value text-success fw-bold">${formatCurrency(order.discountAmount || 0)}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="info-card">
+                                <h6 class="info-card-title">Thông tin giao hàng</h6>
+                                <div class="info-list">
+                                    <div class="info-item">
+                                        <span class="info-label">Người nhận</span>
+                                        <span class="info-value">${order.shippingName || 'Chưa cập nhật'}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-label">Số điện thoại</span>
+                                        <span class="info-value">${order.shippingPhone || 'Chưa cập nhật'}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-label">Địa chỉ giao hàng</span>
+                                        <span class="info-value">${order.shippingAddress || 'Chưa cập nhật'}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-label">Email đặt hàng</span>
+                                        <span class="info-value">${order.user ? order.user.email : 'Không xác định'}</span>
+                                    </div>
+                                    ${order.shippingMethod ? `
+                                        <div class="info-item">
+                                            <span class="info-label">Phương thức giao hàng</span>
+                                            <span class="info-value">${order.shippingMethod}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="premium-modal-section">
+                    <div class="section-header">
+                        <h4 class="section-title">
+                            <i class="fas fa-shopping-bag me-2"></i>
+                            Chi tiết sản phẩm (${order.orderItems ? order.orderItems.length : 0} sản phẩm)
+                        </h4>
+                    </div>
+
+                    <div class="premium-order-items">
+                        ${itemsHtml}
+                    </div>
+                </div>
+
+                <div class="premium-modal-section">
+                    <div class="order-summary-card">
+                        <h4 class="summary-title">Tổng kết đơn hàng</h4>
+                        <div class="summary-details">
+                            ${order.promotionCode ? `
+                                <div class="summary-row">
+                                    <span class="summary-label">Tạm tính:</span>
+                                    <span class="summary-value">${formatCurrency((order.totalPrice || 0) + (order.discountAmount || 0))}</span>
+                                </div>
+                                <div class="summary-row text-success">
+                                    <span class="summary-label">
+                                        <i class="fas fa-percent me-1"></i>
+                                        Giảm giá (${order.promotionCode}):
+                                    </span>
+                                    <span class="summary-value">-${formatCurrency(order.discountAmount || 0)}</span>
+                                </div>
+                                <div class="summary-divider"></div>
+                            ` : ''}
+                            <div class="summary-row summary-total">
+                                <span class="summary-label">Tổng cộng:</span>
+                                <span class="summary-value">${formatCurrency(order.totalPrice)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <style>
+                    /* Premium Modal Content Styles */
+                    .premium-modal-section {
+                        margin-bottom: 32px;
+                    }
+
+                    .premium-modal-section:last-child {
+                        margin-bottom: 0;
+                    }
+
+                    .section-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 24px;
+                        padding-bottom: 16px;
+                        border-bottom: 1px solid var(--neutral-200);
+                    }
+
+                    .section-title {
+                        font-size: 1.125rem;
+                        font-weight: 600;
+                        color: var(--neutral-900);
+                        margin: 0;
+                        display: flex;
+                        align-items: center;
+                    }
+
+                    .info-card {
+                        background: var(--neutral-50);
+                        border-radius: 12px;
+                        padding: 24px;
+                        height: 100%;
+                    }
+
+                    .info-card-title {
+                        font-weight: 600;
+                        color: var(--neutral-900);
+                        margin-bottom: 16px;
+                        font-size: 1rem;
+                    }
+
+                    .info-list {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 12px;
+                    }
+
+                    .info-item {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: flex-start;
+                        gap: 16px;
+                    }
+
+                    .info-label {
+                        font-size: 14px;
+                        color: var(--neutral-500);
+                        font-weight: 500;
+                        flex-shrink: 0;
+                        min-width: 120px;
+                    }
+
+                    .info-value {
+                        font-size: 14px;
+                        color: var(--neutral-900);
+                        font-weight: 600;
+                        text-align: right;
+                        word-break: break-word;
+                    }
+
+                    .info-value.order-id {
+                        font-family: 'JetBrains Mono', monospace;
+                        background: var(--white);
+                        padding: 4px 8px;
+                        border-radius: 6px;
+                        border: 1px solid var(--neutral-200);
+                    }
+
+                    .premium-order-items {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 16px;
+                    }
+
+                    .premium-order-item {
+                        background: var(--white);
+                        border-radius: 12px;
+                        padding: 20px;
+                        border: 1px solid var(--neutral-200);
+                    }
+
+                    .product-image-placeholder {
+                        width: 48px;
+                        height: 48px;
+                        background: linear-gradient(135deg, var(--neutral-200), var(--neutral-500));
+                        border-radius: 8px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: var(--white);
+                        font-size: 18px;
+                        flex-shrink: 0;
+                    }
+
+                    .product-name {
+                        font-size: 1rem;
+                        font-weight: 600;
+                        color: var(--neutral-900);
+                        margin-bottom: 4px;
+                    }
+
+                    .product-code {
+                        font-size: 12px;
+                        color: var(--neutral-500);
+                        margin: 0;
+                        font-family: 'JetBrains Mono', monospace;
+                    }
+
+                    .quantity-display,
+                    .price-display,
+                    .total-display {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        text-align: center;
+                    }
+
+                    .quantity-value,
+                    .price-value,
+                    .total-value {
+                        font-size: 1rem;
+                        font-weight: 700;
+                        color: var(--neutral-900);
+                        margin-bottom: 4px;
+                    }
+
+                    .total-value {
+                        color: var(--primary);
+                        font-family: 'JetBrains Mono', monospace;
+                    }
+
+                    .quantity-label,
+                    .price-label,
+                    .total-label {
+                        font-size: 11px;
+                        color: var(--neutral-500);
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        font-weight: 500;
+                    }
+
+                    .order-summary-card {
+                        background: linear-gradient(135deg, var(--neutral-50), #F8FAFC);
+                        border-radius: 12px;
+                        padding: 24px;
+                        border: 1px solid var(--neutral-200);
+                    }
+
+                    .summary-title {
+                        font-size: 1.125rem;
+                        font-weight: 600;
+                        color: var(--neutral-900);
+                        margin-bottom: 20px;
+                    }
+
+                    .summary-details {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 12px;
+                    }
+
+                    .summary-row {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    }
+
+                    .summary-label {
+                        font-size: 14px;
+                        color: var(--neutral-700);
+                        font-weight: 500;
+                    }
+
+                    .summary-value {
+                        font-size: 14px;
+                        color: var(--neutral-900);
+                        font-weight: 600;
+                    }
+
+                    .summary-divider {
+                        height: 1px;
+                        background: var(--neutral-200);
+                        margin: 8px 0;
+                    }
+
+                    .summary-total {
+                        padding-top: 16px;
+                        border-top: 1px solid var(--neutral-200);
+                        margin-top: 8px;
+                    }
+
+                    .summary-total .summary-label {
+                        font-size: 1rem;
+                        color: var(--neutral-900);
+                        font-weight: 700;
+                    }
+
+                    .summary-total .summary-value {
+                        font-size: 1.5rem;
+                        color: var(--primary);
+                        font-weight: 700;
+                        font-family: 'JetBrains Mono', monospace;
+                    }
+
+                    /* Responsive */
+                    @media (max-width: 767.98px) {
+                        .section-header {
+                            flex-direction: column;
+                            align-items: flex-start;
+                            gap: 16px;
+                        }
+
+                        .info-card {
+                            padding: 16px;
+                        }
+
+                        .info-item {
+                            flex-direction: column;
+                            align-items: flex-start;
+                            gap: 4px;
+                        }
+
+                        .info-label {
+                            min-width: auto;
+                        }
+
+                        .info-value {
+                            text-align: left;
+                        }
+
+                        .premium-order-item {
+                            padding: 16px;
+                        }
+
+                        .premium-order-item .row {
+                            text-align: left;
+                        }
+
+                        .quantity-display,
+                        .price-display,
+                        .total-display {
+                            align-items: flex-start;
+                            text-align: left;
+                        }
+
+                        .order-summary-card {
+                            padding: 16px;
+                        }
+                    }
+                </style>
+            `;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        // Cancel order
+        async function cancelOrder(orderId) {
+            if (!confirm('Bạn có chắc chắn muốn hủy đơn hàng này?')) {
+                return;
+            }
+
+            try {
+                const response = await axios.put(`/api/user/orders/${orderId}/cancel`);
+
+                if (response.data.success) {
+                    alert('Hủy đơn hàng thành công');
+                    loadOrders(); // Reload orders
+                } else {
+                    alert(response.data.message || 'Không thể hủy đơn hàng');
+                }
+            } catch (error) {
+                console.error('Error canceling order:', error);
+                alert('Lỗi khi hủy đơn hàng');
+            }
+        }
+
+        // Refresh orders
+        function refreshOrders() {
+            currentPage = 0;
+            loadOrders();
+        }
+
+        // Enhanced show premium loading
+        function showPremiumLoading() {
+            document.getElementById('ordersLoadingSpinner').style.display = 'block';
+            document.getElementById('ordersContainer').style.display = 'none';
+        }
+
+        // Enhanced show premium error
+        function showPremiumError(message) {
+            const container = document.getElementById('ordersContainer');
+
+            // Hide loading spinner and show container
+            document.getElementById('ordersLoadingSpinner').style.display = 'none';
+            container.style.display = 'block';
+
+            container.innerHTML = `
+                <div class="error-orders">
+                    <div class="error-orders-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3 class="error-orders-title">Có lỗi xảy ra</h3>
+                    <p class="error-orders-text">${message}</p>
+                    <button class="premium-btn premium-btn-refresh" onclick="loadOrders()">
+                        <i class="fas fa-sync-alt me-2"></i>Thử lại
+                    </button>
+                </div>
+            `;
+        }
+
+        function getStatusText(status) {
+            const statusMap = {
+                'PENDING': 'Chờ xử lý',
+                'PAID': 'Đã thanh toán',
+                'SHIPPED': 'Đang giao hàng',
+                'COMPLETED': 'Hoàn thành',
+                'CANCELED': 'Đã hủy'
+            };
+            return statusMap[status] || status;
+        }
+
+        function getPaymentStatusText(paymentStatus) {
+            const statusMap = {
+                'UNPAID': 'Chưa thanh toán',
+                'PAID': 'Đã thanh toán',
+                'FAILED': 'Thanh toán thất bại'
+            };
+            return statusMap[paymentStatus] || paymentStatus;
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        // Logout function (fallback if not loaded from layout)
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                localStorage.removeItem('electronic_store_cart');
+                window.location.href = '/auth/login';
+            } catch (error) {
+                console.error('Error logging out:', error);
+                window.location.href = '/auth/login';
+            }
+        }
+    </script>
+</body>
+</html>

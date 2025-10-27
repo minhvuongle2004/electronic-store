@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Sản phẩm - Admin Panel</title>
+    <!-- Load axios first -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Utility function to properly load admin layout with script execution
+        async function loadAdminLayoutWithScripts(contentLoader, activeNavPage) {
+            try {
+                console.log('Loading admin layout for page:', activeNavPage);
+
+                // Fetch the admin layout
+                const response = await fetch('/admin/layouts/app.html');
+                const layoutHtml = await response.text();
+
+                // Create a temporary container to parse the HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+
+                // Extract and execute scripts manually
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout into container
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually to ensure they run
+                scripts.forEach(script => {
+                    if (script.src) {
+                        // External script - check if already loaded
+                        if (!document.querySelector(`script[src="${script.src}"]`)) {
+                            const newScript = document.createElement('script');
+                            newScript.src = script.src;
+                            newScript.onload = () => console.log('External script loaded:', script.src);
+                            document.head.appendChild(newScript);
+                        }
+                    } else {
+                        // Inline script
+                        const newScript = document.createElement('script');
+                        newScript.textContent = script.textContent;
+                        document.head.appendChild(newScript);
+                    }
+                });
+
+                // Wait for layout and scripts to be fully loaded
+                setTimeout(() => {
+                    // Force AdminLayout initialization if it exists
+                    if (window.AdminLayout) {
+                        console.log('Force initializing AdminLayout...');
+                        window.AdminLayout.forceInit();
+
+                        setTimeout(() => {
+                            if (activeNavPage) {
+                                window.AdminLayout.setActiveNav(activeNavPage);
+                            }
+                        }, 200);
+                    }
+
+                    // Load page-specific content
+                    if (contentLoader) {
+                        contentLoader();
+                    }
+                }, 500);
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load admin layout and inject products content
+        async function loadProductsPage() {
+            await loadAdminLayoutWithScripts(loadProductsContent, 'products');
+        }
+
+        // Load products specific content
+        function loadProductsContent() {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                pageContent.innerHTML = `
+                    <!-- Page Header -->
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">
+                            <i class="fas fa-box me-2"></i>Quản lý Sản phẩm
+                        </h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <a href="/admin/products/create" class="btn btn-success">
+                                <i class="fas fa-plus me-2"></i>Thêm Sản phẩm
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Alert Messages -->
+                    <div id="alertContainer"></div>
+
+                    <!-- Search and Filter -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-search me-2"></i>Tìm kiếm và Lọc
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                        <input type="text" class="form-control" id="searchInput"
+                                               placeholder="Tìm kiếm theo tên sản phẩm...">
+                                        <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <select class="form-select" id="categoryFilter">
+                                        <option value="">Tất cả danh mục</option>
+                                        <!-- Categories will be loaded here -->
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="d-flex justify-content-end">
+                                        <button class="btn btn-primary me-2" onclick="loadProducts()">
+                                            <i class="fas fa-sync-alt me-2"></i>Làm mới
+                                        </button>
+                                        <button class="btn btn-outline-primary" onclick="exportProducts()">
+                                            <i class="fas fa-download me-2"></i>Xuất Excel
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Products Table -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-list me-2"></i>Danh sách Sản phẩm
+                                <span class="badge bg-primary ms-2" id="totalCount">0</span>
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="loadingSpinner" class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Đang tải...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Đang tải sản phẩm...</p>
+                            </div>
+
+                            <div id="productsTableContainer" style="display: none;">
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-hover">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th scope="col" width="8%">#</th>
+                                                <th scope="col" width="12%">Ảnh</th>
+                                                <th scope="col" width="25%">Tên Sản phẩm</th>
+                                                <th scope="col" width="15%">Giá</th>
+                                                <th scope="col" width="10%">Tồn kho</th>
+                                                <th scope="col" width="15%">Danh mục</th>
+                                                <th scope="col" width="15%" class="text-center">Thao tác</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="productsTableBody">
+                                            <!-- Products will be loaded here -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- Pagination -->
+                                <div class="d-flex justify-content-between align-items-center mt-3">
+                                    <div class="text-muted">
+                                        Hiển thị <span id="showingFrom">0</span> - <span id="showingTo">0</span>
+                                        trong tổng số <span id="totalItems">0</span> sản phẩm
+                                    </div>
+                                    <nav aria-label="Products pagination">
+                                        <ul class="pagination mb-0" id="pagination">
+                                            <!-- Pagination will be loaded here -->
+                                        </ul>
+                                    </nav>
+                                </div>
+                            </div>
+
+                            <div id="emptyState" style="display: none;" class="text-center py-5">
+                                <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">Chưa có sản phẩm nào</h5>
+                                <p class="text-muted mb-3">Hãy thêm sản phẩm đầu tiên để bắt đầu</p>
+                                <a href="/admin/products/create" class="btn btn-success">
+                                    <i class="fas fa-plus me-2"></i>Thêm Sản phẩm Đầu tiên
+                                </a>
+                            </div>
+
+                            <div id="noResults" style="display: none;" class="text-center py-5">
+                                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">Không tìm thấy kết quả</h5>
+                                <p class="text-muted mb-3">Thử thay đổi từ khóa tìm kiếm</p>
+                                <button class="btn btn-outline-primary" onclick="clearSearch()">
+                                    <i class="fas fa-times me-2"></i>Xóa bộ lọc
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Initialize products features
+                initProductsFeatures();
+            }
+        }
+
+        // Products data storage
+        let productsData = [];
+        let categoriesData = [];
+        let currentPage = 0;
+        let totalPages = 0;
+        let currentSearch = '';
+        let currentCategoryId = '';
+
+        // Initialize products specific features
+        function initProductsFeatures() {
+            // Load categories for filter
+            loadCategories();
+
+            // Load products data
+            loadProducts();
+
+            // Setup search functionality
+            setupSearch();
+
+            // Setup event listeners
+            setupEventListeners();
+        }
+
+        // Load categories for filter dropdown
+        async function loadCategories() {
+            try {
+                const response = await axios.get('/api/admin/categories');
+                if (response.data.success) {
+                    categoriesData = response.data.data;
+                    renderCategoryFilter();
+                }
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        }
+
+        // Render category filter dropdown
+        function renderCategoryFilter() {
+            const categoryFilter = document.getElementById('categoryFilter');
+            if (categoryFilter && categoriesData.length > 0) {
+                const options = categoriesData.map(category =>
+                    `<option value="${category.id}">${escapeHtml(category.name)}</option>`
+                ).join('');
+
+                categoryFilter.innerHTML = `
+                    <option value="">Tất cả danh mục</option>
+                    ${options}
+                `;
+            }
+        }
+
+        // Load products from API
+        async function loadProducts(page = 0) {
+            try {
+                showLoadingSpinner();
+                currentPage = page;
+
+                // Setup axios authorization if needed
+                const token = localStorage.getItem('token');
+                if (token) {
+                    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                }
+
+                let apiUrl = `/api/admin/products?page=${page}`;
+
+                // Add search parameter if exists
+                if (currentSearch) {
+                    apiUrl = `/api/admin/products/search?name=${encodeURIComponent(currentSearch)}&page=${page}`;
+                }
+
+                // Add category filter if exists
+                if (currentCategoryId) {
+                    apiUrl = `/api/admin/products/category/${currentCategoryId}?page=${page}`;
+                }
+
+                const response = await axios.get(apiUrl);
+
+                if (response.data.success) {
+                    const pageData = response.data.data;
+                    productsData = pageData.content;
+                    totalPages = pageData.totalPages;
+
+                    renderProducts();
+                    renderPagination();
+                    updatePaginationInfo(pageData);
+                    updateTotalCount();
+                } else {
+                    showAlert('danger', 'Lỗi tải dữ liệu: ' + response.data.message);
+                }
+            } catch (error) {
+                console.error('Error loading products:', error);
+                showAlert('danger', 'Không thể tải danh sách sản phẩm. Vui lòng thử lại!');
+            } finally {
+                hideLoadingSpinner();
+            }
+        }
+
+        // Render products table
+        function renderProducts() {
+            const tableBody = document.getElementById('productsTableBody');
+            const tableContainer = document.getElementById('productsTableContainer');
+            const emptyState = document.getElementById('emptyState');
+            const noResults = document.getElementById('noResults');
+
+            if (productsData.length === 0) {
+                if (currentSearch || currentCategoryId) {
+                    // No search results
+                    tableContainer.style.display = 'none';
+                    emptyState.style.display = 'none';
+                    noResults.style.display = 'block';
+                } else {
+                    // No products at all
+                    tableContainer.style.display = 'none';
+                    emptyState.style.display = 'block';
+                    noResults.style.display = 'none';
+                }
+            } else {
+                // Show table with data
+                tableContainer.style.display = 'block';
+                emptyState.style.display = 'none';
+                noResults.style.display = 'none';
+
+                tableBody.innerHTML = productsData.map((product, index) => `
+                    <tr>
+                        <th scope="row">${(currentPage * 10) + index + 1}</th>
+                        <td>
+                            <div class="product-image">
+                                ${product.imageUrl ?
+                                    `<img src="${product.imageUrl}" alt="${escapeHtml(product.name)}"
+                                         class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">` :
+                                    `<div class="bg-light d-flex align-items-center justify-content-center"
+                                         style="width: 60px; height: 60px; border-radius: 0.375rem;">
+                                         <i class="fas fa-image text-muted"></i>
+                                     </div>`
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <strong>${escapeHtml(product.name)}</strong>
+                            ${product.description ?
+                                `<br><small class="text-muted">${escapeHtml(product.description.substring(0, 60))}${product.description.length > 60 ? '...' : ''}</small>` :
+                                ''
+                            }
+                        </td>
+                        <td>
+                            <span class="fw-bold text-primary">${formatPrice(product.price)}</span>
+                        </td>
+                        <td>
+                            <span class="badge ${product.stock > 0 ? (product.stock > 10 ? 'bg-success' : 'bg-warning') : 'bg-danger'}">
+                                ${product.stock}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="text-muted">${getCategoryName(product.categoryId)}</span>
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group" role="group">
+                                <a href="/admin/products/${product.id}/edit"
+                                   class="btn btn-sm btn-outline-primary" title="Chỉnh sửa">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                        title="Xóa" onclick="confirmDelete(${product.id}, '${escapeHtml(product.name)}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        // Get category name by ID
+        function getCategoryName(categoryId) {
+            if (!categoryId) return 'Chưa phân loại';
+            const category = categoriesData.find(cat => cat.id === categoryId);
+            return category ? category.name : 'Chưa phân loại';
+        }
+
+        // Format price
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(price);
+        }
+
+        // Render pagination
+        function renderPagination() {
+            const pagination = document.getElementById('pagination');
+            if (!pagination || totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let paginationHTML = '';
+
+            // Previous button
+            paginationHTML += `
+                <li class="page-item ${currentPage === 0 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadProducts(${currentPage - 1}); return false;">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+            `;
+
+            // Page numbers
+            const startPage = Math.max(0, currentPage - 2);
+            const endPage = Math.min(totalPages - 1, currentPage + 2);
+
+            if (startPage > 0) {
+                paginationHTML += `
+                    <li class="page-item">
+                        <a class="page-link" href="#" onclick="loadProducts(0); return false;">1</a>
+                    </li>
+                `;
+                if (startPage > 1) {
+                    paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHTML += `
+                    <li class="page-item ${i === currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="loadProducts(${i}); return false;">${i + 1}</a>
+                    </li>
+                `;
+            }
+
+            if (endPage < totalPages - 1) {
+                if (endPage < totalPages - 2) {
+                    paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+                paginationHTML += `
+                    <li class="page-item">
+                        <a class="page-link" href="#" onclick="loadProducts(${totalPages - 1}); return false;">${totalPages}</a>
+                    </li>
+                `;
+            }
+
+            // Next button
+            paginationHTML += `
+                <li class="page-item ${currentPage === totalPages - 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="loadProducts(${currentPage + 1}); return false;">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            `;
+
+            pagination.innerHTML = paginationHTML;
+        }
+
+        // Update pagination info
+        function updatePaginationInfo(pageData) {
+            const showingFrom = document.getElementById('showingFrom');
+            const showingTo = document.getElementById('showingTo');
+            const totalItems = document.getElementById('totalItems');
+
+            if (showingFrom && showingTo && totalItems) {
+                const from = (pageData.number * pageData.size) + 1;
+                const to = Math.min((pageData.number + 1) * pageData.size, pageData.totalElements);
+
+                showingFrom.textContent = pageData.totalElements > 0 ? from : 0;
+                showingTo.textContent = to;
+                totalItems.textContent = pageData.totalElements;
+            }
+        }
+
+        // Setup search functionality
+        function setupSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const categoryFilter = document.getElementById('categoryFilter');
+
+            // Debounced search
+            let searchTimeout;
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    currentSearch = this.value.trim();
+                    loadProducts(0);
+                }, 300);
+            });
+
+            // Category filter
+            categoryFilter.addEventListener('change', function() {
+                currentCategoryId = this.value;
+                loadProducts(0);
+            });
+        }
+
+        // Clear search
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('categoryFilter').value = '';
+            currentSearch = '';
+            currentCategoryId = '';
+            loadProducts(0);
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Clear search button
+            document.getElementById('clearSearch').addEventListener('click', clearSearch);
+        }
+
+        // Delete confirmation
+        function confirmDelete(productId, productName) {
+            if (confirm(`Bạn có chắc chắn muốn xóa sản phẩm "${productName}" không?\\n\\nHành động này không thể hoàn tác!`)) {
+                deleteProduct(productId);
+            }
+        }
+
+        // Delete product
+        async function deleteProduct(productId) {
+            try {
+                const response = await axios.delete(`/api/admin/products/${productId}`);
+
+                if (response.data.success) {
+                    showAlert('success', 'Xóa sản phẩm thành công!');
+                    loadProducts(currentPage); // Reload current page
+                } else {
+                    showAlert('danger', 'Lỗi xóa sản phẩm: ' + response.data.message);
+                }
+            } catch (error) {
+                console.error('Error deleting product:', error);
+                showAlert('danger', 'Không thể xóa sản phẩm. Vui lòng thử lại!');
+            }
+        }
+
+        // Export products to Excel (placeholder)
+        function exportProducts() {
+            showAlert('info', 'Tính năng xuất Excel đang được phát triển...');
+        }
+
+        // Update total count
+        function updateTotalCount() {
+            const totalCount = document.getElementById('totalCount');
+            if (totalCount) {
+                totalCount.textContent = productsData.length;
+            }
+        }
+
+        // Show loading spinner
+        function showLoadingSpinner() {
+            const spinner = document.getElementById('loadingSpinner');
+            const tableContainer = document.getElementById('productsTableContainer');
+            const emptyState = document.getElementById('emptyState');
+            const noResults = document.getElementById('noResults');
+
+            if (spinner) spinner.style.display = 'block';
+            if (tableContainer) tableContainer.style.display = 'none';
+            if (emptyState) emptyState.style.display = 'none';
+            if (noResults) noResults.style.display = 'none';
+        }
+
+        // Hide loading spinner
+        function hideLoadingSpinner() {
+            const spinner = document.getElementById('loadingSpinner');
+            if (spinner) spinner.style.display = 'none';
+        }
+
+        // Show alert message
+        function showAlert(type, message) {
+            const alertContainer = document.getElementById('alertContainer');
+            if (alertContainer) {
+                const alertId = 'alert-' + Date.now();
+                alertContainer.innerHTML = `
+                    <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
+                        <i class="fas ${getAlertIcon(type)} me-2"></i>
+                        ${message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
+
+                // Auto hide after 5 seconds for success/info alerts
+                if (type === 'success' || type === 'info') {
+                    setTimeout(() => {
+                        const alert = document.getElementById(alertId);
+                        if (alert) {
+                            const bsAlert = new bootstrap.Alert(alert);
+                            bsAlert.close();
+                        }
+                    }, 5000);
+                }
+            }
+        }
+
+        // Get alert icon based on type
+        function getAlertIcon(type) {
+            switch (type) {
+                case 'success': return 'fa-check-circle';
+                case 'danger': return 'fa-exclamation-triangle';
+                case 'warning': return 'fa-exclamation-triangle';
+                case 'info': return 'fa-info-circle';
+                default: return 'fa-info-circle';
+            }
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        // Load products page when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadProductsPage();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng Nhập - Electronic Store</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link th:href="@{/css/auth.css}" rel="stylesheet">
+</head>
+<body class="auth-body">
+    <!-- Brand Header -->
+    <nav class="navbar navbar-light bg-transparent py-3">
+        <div class="container">
+            <a class="navbar-brand text-primary fw-bold fs-3" th:href="@{/}">
+                <i class="fas fa-laptop me-2"></i>Electronic Store
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="auth-main">
+        <div>
+    <div class="auth-card">
+        <div class="auth-card-header">
+            <h3><i class="fas fa-sign-in-alt me-2"></i>Đăng Nhập</h3>
+            <p class="mb-0 mt-2 opacity-75">Chào mừng bạn quay trở lại!</p>
+        </div>
+
+        <div class="auth-card-body">
+            <!-- Alert messages -->
+            <div id="alertContainer"></div>
+
+            <form id="loginForm" onsubmit="return false;">
+                <div class="mb-3">
+                    <label for="username" class="form-label fw-semibold">Username hoặc Email</label>
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fas fa-user text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control" id="username" name="username"
+                               placeholder="Nhập username hoặc email của bạn" required>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="password" class="form-label fw-semibold">Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fas fa-lock text-muted"></i>
+                        </span>
+                        <input type="password" class="form-control" id="password" name="password"
+                               placeholder="Nhập password của bạn" required>
+                        <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="d-grid mb-3">
+                    <button type="submit" class="btn btn-primary btn-lg" id="loginBtn">
+                        <span id="loginSpinner" class="spinner-border spinner-border-sm me-2" style="display: none;"></span>
+                        <i class="fas fa-sign-in-alt me-2"></i>Đăng Nhập
+                    </button>
+                </div>
+            </form>
+
+            <div class="text-center">
+                <div class="d-flex align-items-center my-3">
+                    <hr class="flex-grow-1">
+                    <span class="px-3 text-muted small">HOẶC</span>
+                    <hr class="flex-grow-1">
+                </div>
+
+                <p class="mb-3 text-muted">Chưa có tài khoản?</p>
+                <a th:href="@{/auth/register}" class="btn btn-outline-primary">
+                    <i class="fas fa-user-plus me-2"></i>Đăng Ký Ngay
+                </a>
+            </div>
+
+            <div class="text-center mt-4">
+                <small class="text-muted">
+                    <a th:href="@{/}" class="text-decoration-none">
+                        <i class="fas fa-arrow-left me-1"></i>Về trang chủ
+                    </a>
+                </small>
+            </div>
+        </div>
+    </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="auth-footer text-center py-3">
+        <div class="container">
+            <small class="text-muted">
+                &copy; 2024 Electronic Store. All rights reserved.
+            </small>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script th:src="@{/js/auth.js}"></script>
+
+<script th:inline="javascript">
+    // Login form handling
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const loginBtn = document.getElementById('loginBtn');
+        const loginSpinner = document.getElementById('loginSpinner');
+        const alertContainer = document.getElementById('alertContainer');
+
+        // Validation
+        if (!username || !password) {
+            showAlert('danger', 'Vui lòng nhập đầy đủ thông tin!');
+            return;
+        }
+
+        // Show loading
+        loginBtn.disabled = true;
+        loginSpinner.style.display = 'inline-block';
+        loginBtn.innerHTML = `
+            <span class="spinner-border spinner-border-sm me-2"></span>
+            Đang đăng nhập...
+        `;
+
+        try {
+            const response = await axios.post('/api/auth/login', {
+                username: username,
+                password: password
+            });
+
+            console.log('Login response:', response.data); // Debug log
+
+            if (response.data.success) {
+                // Store token and user info
+                localStorage.setItem('token', response.data.data.token);
+                localStorage.setItem('user', JSON.stringify(response.data.data));
+
+                // Setup axios defaults
+                axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.data.token}`;
+
+                // Show success message
+                showAlert('success', `Chào mừng ${response.data.data.fullName || response.data.data.username}! Đang chuyển hướng...`);
+
+                // Redirect based on role
+                setTimeout(() => {
+                    const userRole = response.data.data.role;
+                    if (userRole === 'ADMIN') {
+                        window.location.href = '/admin/dashboard';
+                    } else {
+                        window.location.href = '/user/home';
+                    }
+                }, 1500);
+            } else {
+                showAlert('danger', response.data.message || 'Đăng nhập thất bại');
+            }
+        } catch (error) {
+            console.error('Login error:', error);
+            if (error.response && error.response.data) {
+                showAlert('danger', error.response.data.message || 'Sai username/email hoặc mật khẩu');
+            } else if (error.request) {
+                showAlert('danger', 'Không thể kết nối đến server. Vui lòng thử lại!');
+            } else {
+                showAlert('danger', 'Có lỗi xảy ra. Vui lòng thử lại!');
+            }
+        } finally {
+            // Reset button
+            loginBtn.disabled = false;
+            loginSpinner.style.display = 'none';
+            loginBtn.innerHTML = `
+                <i class="fas fa-sign-in-alt me-2"></i>Đăng Nhập
+            `;
+        }
+    });
+
+    // Toggle password visibility
+    document.getElementById('togglePassword').addEventListener('click', function() {
+        const passwordInput = document.getElementById('password');
+        const icon = this.querySelector('i');
+
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            passwordInput.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    });
+
+    // Show alert function
+    function showAlert(type, message) {
+        const alertContainer = document.getElementById('alertContainer');
+        alertContainer.innerHTML = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+
+        // Auto hide after 5 seconds for success
+        if (type === 'success') {
+            setTimeout(() => {
+                const alert = alertContainer.querySelector('.alert');
+                if (alert) {
+                    const bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                }
+            }, 5000);
+        }
+    }
+
+    // Check if already logged in by verifying server session
+    window.addEventListener('load', async function() {
+        // Wait a bit to ensure any logout process is completed first
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const token = localStorage.getItem('token');
+        const user = localStorage.getItem('user');
+
+        console.log('Login page load check - Token:', token, 'User exists:', !!user);
+
+        // BOTH token and user must exist for valid login
+        if (token && user && token.trim() !== '' && user.trim() !== '' && token !== 'null') {
+            try {
+                // Verify with server session
+                const response = await axios.get('/api/auth/session-info');
+                console.log('Session check response:', response.data);
+
+                if (response.data.success && response.data.data.userId) {
+                    const userData = JSON.parse(user);
+                    console.log('Valid session, redirecting user:', userData);
+                    if (userData.role === 'ADMIN') {
+                        window.location.href = '/admin/dashboard';
+                    } else {
+                        window.location.href = '/user/home';
+                    }
+                    return;
+                }
+            } catch (e) {
+                console.warn('Session verification failed:', e);
+            }
+        }
+
+        // Clear ALL localStorage data if validation fails
+        console.log('Clearing invalid localStorage data');
+        localStorage.clear();
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.clear();
+        }
+    });
+
+    // Enter key handling
+    document.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && (e.target.id === 'username' || e.target.id === 'password')) {
+            document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+        }
+    });
+</script>
+</html>

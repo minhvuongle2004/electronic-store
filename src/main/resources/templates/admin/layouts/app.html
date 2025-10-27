@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Electronic Store</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Admin Styles -->
+    <style>
+        .admin-body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fc;
+        }
+
+        /* Top Navbar */
+        .navbar {
+            z-index: 1000;
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 56px;
+            left: 0;
+            width: 250px;
+            height: calc(100vh - 56px);
+            background: linear-gradient(180deg, #4e73df 10%, #224abe 100%);
+            transition: transform 0.3s ease;
+            z-index: 999;
+            overflow-y: auto;
+        }
+
+        .sidebar-collapsed {
+            transform: translateX(-250px);
+        }
+
+        .sidebar-header {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .sidebar-nav {
+            padding: 1rem 0;
+        }
+
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.8);
+            padding: 0.75rem 1.5rem;
+            border: none;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: block;
+        }
+
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            color: #ffffff;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-left: 3px solid #ffffff;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: 250px;
+            margin-top: 56px;
+            transition: margin-left 0.3s ease;
+            min-height: calc(100vh - 56px);
+        }
+
+        .main-content-expanded {
+            margin-left: 0;
+        }
+
+        /* Cards */
+        .card {
+            border: none;
+            border-radius: 0.35rem;
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+        }
+
+        .card-header {
+            background-color: #f8f9fc;
+            border-bottom: 1px solid #e3e6f0;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-250px);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+        }
+    </style>
+</head>
+<body class="admin-body">
+<!-- Top Navbar -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top" id="topNavbar">
+    <div class="container-fluid">
+        <!-- Sidebar Toggle -->
+        <button class="btn btn-outline-light me-3" type="button" id="sidebarToggle">
+            <i class="fas fa-bars"></i>
+        </button>
+
+        <!-- Brand -->
+        <a class="navbar-brand" href="#">
+            <i class="fas fa-shield-alt me-2"></i>Admin Panel
+        </a>
+
+        <!-- User Info & Actions -->
+        <div class="navbar-nav ms-auto">
+            <div class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown"
+                   role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-user-circle me-2"></i>
+                    <span id="adminUsername">Admin</span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                    <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i>Profile</a></li>
+                    <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <h5 class="text-white mb-0">
+            <i class="fas fa-laptop me-2"></i>Electronic Store
+        </h5>
+    </div>
+
+    <nav class="sidebar-nav">
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link" href="/admin/dashboard" data-page="dashboard">
+                    <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/admin/categories" data-page="categories">
+                    <i class="fas fa-tags me-2"></i>Quản lý Danh mục
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/admin/products" data-page="products">
+                    <i class="fas fa-box me-2"></i>Quản lý Sản phẩm
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/admin/orders" data-page="orders">
+                    <i class="fas fa-shopping-cart me-2"></i>Quản lý Đơn hàng
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/admin/users" data-page="users">
+                    <i class="fas fa-users me-2"></i>Quản lý Người dùng
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/admin/promotions" data-page="promotions">
+                    <i class="fas fa-percentage me-2"></i>Quản lý Khuyến mãi
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/admin/reports" data-page="reports">
+                    <i class="fas fa-chart-bar me-2"></i>Báo cáo Thống kê
+                </a>
+            </li>
+        </ul>
+    </nav>
+</div>
+
+<!-- Main Content Container -->
+<div class="main-content" id="mainContent">
+    <div class="container-fluid py-4" id="pageContent">
+        <!-- Page content will be loaded here -->
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+<script>
+    // Global Admin Layout Functions
+    window.AdminLayout = {
+        // Initialize layout
+        init() {
+            console.log('=== Initializing AdminLayout components ===');
+
+            // Skip auth check for now - focus on UI functionality
+            this.initSidebarToggle();
+            this.initDropdown();
+            this.initUserInfo();
+            this.initLogout();
+            this.initNavigation();
+
+            window.AdminLayoutInitialized = true;
+            console.log('=== AdminLayout initialization complete ===');
+        },
+
+        // Initialize dropdown with hover functionality
+        initDropdown() {
+            const dropdownContainer = document.querySelector('.nav-item.dropdown');
+            const dropdownMenu = document.querySelector('.dropdown-menu');
+
+            if (dropdownContainer && dropdownMenu) {
+                console.log('Found dropdown elements');
+
+                // Show dropdown on mouse enter
+                dropdownContainer.addEventListener('mouseenter', function() {
+                    dropdownMenu.classList.add('show');
+                    console.log('Dropdown shown on hover');
+                });
+
+                // Hide dropdown on mouse leave
+                dropdownContainer.addEventListener('mouseleave', function() {
+                    dropdownMenu.classList.remove('show');
+                    console.log('Dropdown hidden on leave');
+                });
+
+                // Keep dropdown open when hovering over menu items
+                dropdownMenu.addEventListener('mouseenter', function() {
+                    dropdownMenu.classList.add('show');
+                });
+
+                dropdownMenu.addEventListener('mouseleave', function() {
+                    dropdownMenu.classList.remove('show');
+                });
+
+            } else {
+                console.error('Dropdown elements not found');
+            }
+        },
+
+        // Sidebar toggle functionality - very simple
+        initSidebarToggle() {
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+
+            if (sidebarToggle && sidebar && mainContent) {
+                console.log('Found sidebar toggle elements');
+
+                sidebarToggle.onclick = function() {
+                    console.log('Sidebar toggle clicked (simple)');
+
+                    // Simple toggle for all screen sizes
+                    sidebar.classList.toggle('sidebar-collapsed');
+                    mainContent.classList.toggle('main-content-expanded');
+
+                    console.log('Sidebar classes toggled');
+                };
+
+            } else {
+                console.error('Sidebar toggle elements not found:', {
+                    toggle: !!sidebarToggle,
+                    sidebar: !!sidebar,
+                    mainContent: !!mainContent
+                });
+            }
+        },
+
+        // Load and display user info
+        initUserInfo() {
+            console.log('Initializing user info...');
+            const user = localStorage.getItem('user');
+            if (user) {
+                try {
+                    const userData = JSON.parse(user);
+                    const adminUsernameEl = document.getElementById('adminUsername');
+                    if (adminUsernameEl) {
+                        adminUsernameEl.textContent = userData.fullName || userData.username;
+                        console.log('User info loaded:', userData.fullName || userData.username);
+                    }
+                } catch (e) {
+                    console.error('Error parsing user data:', e);
+                }
+            } else {
+                console.log('No user data found - using default');
+            }
+        },
+
+        // Logout functionality
+        initLogout() {
+            console.log('Initializing logout...');
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.onclick = function(e) {
+                    e.preventDefault();
+                    console.log('Logout clicked');
+                    if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('user');
+                        delete axios.defaults.headers.common['Authorization'];
+                        alert('Đăng xuất thành công!');
+                        window.location.href = '/auth/login';
+                    }
+                };
+                console.log('Logout button initialized');
+            } else {
+                console.error('Logout button not found');
+            }
+        },
+
+        // Check authentication without redirecting immediately
+        checkAuthentication() {
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+
+            // For testing purposes, allow UI to load even without auth
+            if (!token || !user) {
+                console.log('No token or user found - allowing UI to load for testing');
+                return true; // Allow UI to load
+            }
+
+            try {
+                const userData = JSON.parse(user);
+                if (userData.role !== 'ADMIN') {
+                    console.log('User is not admin');
+                    return false;
+                }
+
+                // Set up axios defaults
+                axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                return true;
+            } catch (e) {
+                console.error('Error parsing user data:', e);
+                return false;
+            }
+        },
+
+        // Navigation handling
+        initNavigation() {
+            console.log('Initializing navigation...');
+            const navLinks = document.querySelectorAll('.sidebar .nav-link');
+            console.log('Found nav links:', navLinks.length);
+
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+
+                    // Remove active class from all links
+                    navLinks.forEach(l => l.classList.remove('active'));
+                    // Add active class to clicked link
+                    this.classList.add('active');
+
+                    const page = this.getAttribute('data-page');
+                    if (page) {
+                        window.AdminLayout.loadPage(page);
+                    }
+                });
+            });
+        },
+
+        // Force initialization (for testing)
+        forceInit() {
+            console.log('=== FORCE INITIALIZATION ===');
+            window.AdminLayoutInitialized = false;
+            this.init();
+        },
+
+        // Load page content
+        loadPage(pageName) {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                pageContent.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Đang tải...</div>';
+                console.log(`Loading page: ${pageName}`);
+
+                // Redirect to the actual page
+                setTimeout(() => {
+                    window.location.href = `/admin/${pageName}`;
+                }, 200);
+            }
+        },
+
+        // Set active navigation item
+        setActiveNav(pageName) {
+            const navLinks = document.querySelectorAll('.sidebar .nav-link');
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('data-page') === pageName) {
+                    link.classList.add('active');
+                }
+            });
+        }
+    };
+
+    // Multiple initialization attempts with better detection
+    console.log('=== AdminLayout Script loaded - Context:', document.readyState, 'URL:', window.location.href);
+
+    // Enhanced initialization function
+    function tryInitializeAdminLayout(attemptNumber, context) {
+        console.log(`=== Initialize attempt ${attemptNumber} (${context}) ===`);
+        console.log('Document state:', document.readyState);
+        console.log('Body exists:', !!document.body);
+        console.log('Required elements exist:', {
+            sidebarToggle: !!document.getElementById('sidebarToggle'),
+            sidebar: !!document.getElementById('sidebar'),
+            mainContent: !!document.getElementById('mainContent'),
+            dropdown: !!document.querySelector('.nav-item.dropdown')
+        });
+
+        if (!window.AdminLayoutInitialized) {
+            console.log(`Running AdminLayout.init() - attempt ${attemptNumber}`);
+            window.AdminLayout.init();
+        } else {
+            console.log('AdminLayout already initialized, skipping');
+        }
+    }
+
+    // Try 1: DOMContentLoaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded - attempt 1');
+            setTimeout(() => tryInitializeAdminLayout(1, 'DOMContentLoaded'), 100);
+        });
+    } else {
+        console.log('DOM already loaded - immediate attempt 1');
+        setTimeout(() => tryInitializeAdminLayout(1, 'immediate'), 100);
+    }
+
+    // Try 2: Window load
+    if (document.readyState !== 'complete') {
+        window.addEventListener('load', function() {
+            console.log('Window loaded - attempt 2');
+            setTimeout(() => tryInitializeAdminLayout(2, 'window.load'), 200);
+        });
+    } else {
+        console.log('Window already loaded - immediate attempt 2');
+        setTimeout(() => tryInitializeAdminLayout(2, 'window.complete'), 200);
+    }
+
+    // Try 3: Delayed fallback
+    setTimeout(() => tryInitializeAdminLayout(3, 'timeout.500'), 500);
+    setTimeout(() => tryInitializeAdminLayout(4, 'timeout.1000'), 1000);
+    setTimeout(() => tryInitializeAdminLayout(5, 'timeout.2000'), 2000);
+
+    // Manual trigger (use in console if needed)
+    // window.AdminLayout.forceInit()
+</script>
+</body>
+</html>

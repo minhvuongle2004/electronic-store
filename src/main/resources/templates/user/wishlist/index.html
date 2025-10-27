@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Danh sách yêu thích - Electronic Store</title>
+    <!-- Load Bootstrap and required libraries first -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Enhanced function to load user layout with proper script execution
+        async function loadLayoutWithScripts(layoutUrl, contentLoader, activeNavPage) {
+            try {
+                console.log('Loading user layout...');
+
+                // Fetch the user layout
+                const response = await fetch(layoutUrl);
+                const layoutHtml = await response.text();
+
+                // Create a temporary container to parse the HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+
+                // Extract and execute scripts manually
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout into container
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually to ensure they run
+                const scriptsToLoad = [];
+                scripts.forEach(script => {
+                    if (script.src) {
+                        // Check if the script functionality is actually available
+                        const srcPath = script.src.includes('://') ? script.src : new URL(script.src, window.location.origin).href;
+                        let shouldLoad = true;
+
+                        // Special checks for specific libraries
+                        if (script.src.includes('bootstrap')) {
+                            shouldLoad = typeof bootstrap === 'undefined';
+                        } else if (script.src.includes('axios')) {
+                            shouldLoad = typeof axios === 'undefined';
+                        } else {
+                            shouldLoad = !document.querySelector(`script[src="${srcPath}"]`) && !document.querySelector(`script[src="${script.src}"]`);
+                        }
+
+                        if (shouldLoad) {
+                            scriptsToLoad.push(script);
+                        } else {
+                            console.log('Script already loaded, skipping:', script.src);
+                        }
+                    } else {
+                        // Inline script - always add but with hash check
+                        const scriptContent = script.textContent.trim();
+                        if (scriptContent) {
+                            const hash = scriptContent.length + '_' + scriptContent.substring(0, 10).replace(/[^a-zA-Z0-9]/g, '');
+                            if (!document.querySelector(`script[data-inline-hash="${hash}"]`)) {
+                                scriptsToLoad.push(script);
+                            }
+                        }
+                    }
+                });
+
+                // Load scripts sequentially to ensure proper initialization
+                let loadedCount = 0;
+                function loadNextScript() {
+                    if (loadedCount >= scriptsToLoad.length) {
+                        initializeAfterScriptsLoaded();
+                        return;
+                    }
+
+                    const script = scriptsToLoad[loadedCount];
+                    if (script.src) {
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        newScript.onload = () => {
+                            console.log('External script loaded:', script.src);
+                            loadedCount++;
+                            loadNextScript();
+                        };
+                        newScript.onerror = () => {
+                            console.error('Failed to load script:', script.src);
+                            loadedCount++;
+                            loadNextScript();
+                        };
+                        document.head.appendChild(newScript);
+                    } else {
+                        const scriptContent = script.textContent.trim();
+                        if (scriptContent) {
+                            // Execute inline script properly
+                            try {
+                                // Use Function constructor for better error handling and scope
+                                const scriptFunction = new Function(scriptContent);
+                                scriptFunction();
+                                console.log('Inline script executed successfully');
+                            } catch (error) {
+                                console.error('Error executing inline script:', error);
+                                // Fallback to eval if Function constructor fails
+                                try {
+                                    eval(scriptContent);
+                                    console.log('Inline script executed via eval fallback');
+                                } catch (evalError) {
+                                    console.error('Error in eval fallback:', evalError);
+                                }
+                            }
+                        }
+                        loadedCount++;
+                        setTimeout(loadNextScript, 10); // Small delay for inline scripts
+                    }
+                }
+
+                loadNextScript();
+
+                function initializeAfterScriptsLoaded() {
+                    // Wait a bit for all scripts to initialize
+                    setTimeout(() => {
+                        console.log('Initializing after all scripts loaded');
+
+                        // Check if Bootstrap is available
+                        if (typeof bootstrap !== 'undefined') {
+                            // Initialize Bootstrap dropdowns
+                            const dropdownElementList = document.querySelectorAll('.dropdown-toggle');
+                            const dropdownList = [...dropdownElementList].map(dropdownToggleEl => {
+                                return new bootstrap.Dropdown(dropdownToggleEl);
+                            });
+                            console.log('Bootstrap dropdowns initialized:', dropdownList.length);
+                        } else {
+                            console.error('Bootstrap not available');
+                        }
+
+                        // Set active navigation if specified
+                        if (activeNavPage) {
+                            const navLinks = document.querySelectorAll('.premium-nav-link');
+                            navLinks.forEach(link => {
+                                if (link.getAttribute('href').includes(activeNavPage)) {
+                                    link.classList.add('active');
+                                }
+                            });
+                        }
+
+                        // Setup logout button manually
+                        const logoutBtn = document.getElementById('logoutBtn');
+                        if (logoutBtn && window.Auth) {
+                            logoutBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+                                    window.Auth.logout();
+                                }
+                            });
+                            console.log('Logout button handler attached manually');
+                        }
+
+                        // Load page-specific content
+                        if (contentLoader) {
+                            contentLoader();
+                        }
+                    }, 300);
+                }
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load user layout and inject wishlist content
+        async function loadWishlistPage() {
+            await loadLayoutWithScripts('/user/layouts/app.html', loadWishlistContent, 'wishlist');
+        }
+
+        // Data storage
+        let wishlistData = [];
+        let isLoading = false;
+
+        // Load wishlist specific content
+        function loadWishlistContent() {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                pageContent.innerHTML = `
+                    <!-- Wishlist Page Header -->
+                    <section class="wishlist-header">
+                        <div class="container">
+                            <!-- Breadcrumb -->
+                            <nav aria-label="breadcrumb" class="premium-breadcrumb">
+                                <ol class="breadcrumb">
+                                    <li class="breadcrumb-item">
+                                        <a href="/user/home">
+                                            <i class="fas fa-home me-1"></i>Trang chủ
+                                        </a>
+                                    </li>
+                                    <li class="breadcrumb-item active" aria-current="page">
+                                        <i class="fas fa-heart me-1"></i>Danh sách yêu thích
+                                    </li>
+                                </ol>
+                            </nav>
+
+                            <!-- Page Title -->
+                            <div class="wishlist-title-section">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h1 class="wishlist-title">
+                                            <span class="title-icon">
+                                                <i class="fas fa-heart"></i>
+                                            </span>
+                                            Danh sách yêu thích
+                                        </h1>
+                                        <p class="wishlist-subtitle">
+                                            Những sản phẩm bạn yêu thích và muốn mua sau này
+                                        </p>
+                                    </div>
+                                    <div class="wishlist-actions">
+                                        <button class="premium-btn premium-btn-clear-all" onclick="clearWishlist()" id="clearAllBtn" style="display: none;">
+                                            <i class="fas fa-trash-alt me-2"></i>Xóa tất cả
+                                        </button>
+                                        <a href="/user/products" class="premium-btn premium-btn-continue">
+                                            <i class="fas fa-search me-2"></i>Khám phá thêm
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Wishlist Content Section -->
+                    <section class="wishlist-content-section">
+                        <div class="container">
+                            <!-- Loading Spinner -->
+                            <div id="wishlistLoadingSpinner" class="loading-container">
+                                <div class="loading-spinner">
+                                    <div class="spinner"></div>
+                                    <p class="loading-text">Đang tải danh sách yêu thích...</p>
+                                </div>
+                            </div>
+
+                            <!-- Wishlist Container -->
+                            <div id="wishlistContainer" style="display: none;">
+                                <!-- Wishlist content will be loaded here -->
+                            </div>
+
+                            <!-- Empty State -->
+                            <div id="emptyState" style="display: none;" class="empty-wishlist">
+                                <div class="empty-wishlist-icon">
+                                    <i class="fas fa-heart"></i>
+                                </div>
+                                <h3 class="empty-wishlist-title">Danh sách yêu thích trống</h3>
+                                <p class="empty-wishlist-text">
+                                    Hãy khám phá và thêm những sản phẩm yêu thích vào danh sách của bạn
+                                </p>
+                                <a href="/user/products" class="premium-btn premium-btn-continue">
+                                    <i class="fas fa-shopping-bag me-2"></i>Khám phá sản phẩm
+                                </a>
+                            </div>
+
+                            <!-- Error State -->
+                            <div id="errorState" style="display: none;" class="error-state">
+                                <div class="error-state-icon">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                </div>
+                                <h3 class="error-state-title">Có lỗi xảy ra</h3>
+                                <p class="error-state-text">
+                                    Không thể tải danh sách yêu thích. Vui lòng thử lại sau.
+                                </p>
+                                <button class="premium-btn premium-btn-continue" onclick="loadWishlistData()">
+                                    <i class="fas fa-redo me-2"></i>Thử lại
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Recommended Products -->
+                    <section class="recommended-section">
+                        <div class="container">
+                            <div class="recommended-header">
+                                <h2 class="recommended-title">
+                                    <span class="title-icon">
+                                        <i class="fas fa-star"></i>
+                                    </span>
+                                    Có thể bạn quan tâm
+                                </h2>
+                                <p class="recommended-subtitle">
+                                    Khám phá thêm các sản phẩm chất lượng cao
+                                </p>
+                            </div>
+
+                            <!-- Loading Spinner for Recommended -->
+                            <div id="recommendedLoadingSpinner" class="loading-container-sm">
+                                <div class="loading-spinner-sm">
+                                    <div class="spinner-sm"></div>
+                                    <p class="loading-text-sm">Đang tải sản phẩm gợi ý...</p>
+                                </div>
+                            </div>
+
+                            <!-- Recommended Products Grid -->
+                            <div id="recommendedProducts" style="display: none;">
+                                <!-- Products will be loaded here -->
+                            </div>
+                        </div>
+                    </section>
+
+                    <style>
+                        /* Wishlist Page Styles with Premium Color Scheme */
+                        :root {
+                            --neutral-900: #121212;  /* Text chính (heading) */
+                            --neutral-700: #2E2E2E;  /* Text body, nhãn phụ */
+                            --neutral-500: #9E9E9E;  /* Placeholder, text phụ */
+                            --neutral-200: #E0E0E0;  /* Border, divider */
+                            --neutral-50: #FAFAFA;   /* Background sáng */
+                            --white: #FFFFFF;        /* Nền chính */
+                            --primary: #3B82F6;      /* Primary color */
+                            --success: #10B981;      /* Success color */
+                            --danger: #EF4444;       /* Danger color */
+                            --heart: #E11D48;        /* Heart color */
+                        }
+
+                        /* Wishlist Header */
+                        .wishlist-header {
+                            padding: 40px 0 60px;
+                            background: linear-gradient(135deg, var(--neutral-50) 0%, #F8FAFC 100%);
+                            border-bottom: 1px solid var(--neutral-200);
+                        }
+
+                        .premium-breadcrumb {
+                            margin-bottom: 32px;
+                        }
+
+                        .premium-breadcrumb .breadcrumb {
+                            background: none;
+                            padding: 0;
+                            margin: 0;
+                            font-size: 14px;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item {
+                            font-weight: 500;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item a {
+                            color: var(--neutral-500);
+                            text-decoration: none;
+                            transition: color 0.3s ease;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item a:hover {
+                            color: var(--primary);
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item.active {
+                            color: var(--neutral-700);
+                            font-weight: 600;
+                        }
+
+                        .wishlist-title-section {
+                            margin-bottom: 0;
+                        }
+
+                        .wishlist-title {
+                            font-size: 2.5rem;
+                            font-weight: 700;
+                            color: var(--neutral-900);
+                            margin-bottom: 12px;
+                            display: flex;
+                            align-items: center;
+                            letter-spacing: -0.025em;
+                        }
+
+                        .title-icon {
+                            width: 56px;
+                            height: 56px;
+                            background: linear-gradient(135deg, var(--heart), #EC4899);
+                            border-radius: 14px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-right: 16px;
+                            color: var(--white);
+                            font-size: 24px;
+                        }
+
+                        .wishlist-subtitle {
+                            font-size: 1.125rem;
+                            color: var(--neutral-700);
+                            margin: 0;
+                        }
+
+                        .wishlist-actions {
+                            display: flex;
+                            gap: 12px;
+                            align-items: center;
+                        }
+
+                        .premium-btn {
+                            padding: 12px 24px;
+                            border-radius: 8px;
+                            font-weight: 600;
+                            font-size: 14px;
+                            border: none;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            display: inline-flex;
+                            align-items: center;
+                            justify-content: center;
+                            text-decoration: none;
+                        }
+
+                        .premium-btn-continue {
+                            background: linear-gradient(135deg, var(--primary), #8B5CF6);
+                            color: var(--white);
+                        }
+
+                        .premium-btn-continue:hover {
+                            transform: translateY(-1px);
+                            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                            color: var(--white);
+                        }
+
+                        .premium-btn-clear-all {
+                            background: transparent;
+                            color: var(--danger);
+                            border: 1px solid var(--danger);
+                        }
+
+                        .premium-btn-clear-all:hover {
+                            background: var(--danger);
+                            color: var(--white);
+                        }
+
+                        /* Content Sections */
+                        .wishlist-content-section {
+                            padding: 60px 0;
+                            background: var(--white);
+                        }
+
+                        .recommended-section {
+                            padding: 80px 0;
+                            background: var(--neutral-50);
+                            border-top: 1px solid var(--neutral-200);
+                        }
+
+                        .recommended-header {
+                            text-align: center;
+                            margin-bottom: 60px;
+                        }
+
+                        .recommended-title {
+                            font-size: 2rem;
+                            font-weight: 700;
+                            color: var(--neutral-900);
+                            margin-bottom: 12px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            letter-spacing: -0.025em;
+                        }
+
+                        .recommended-title .title-icon {
+                            width: 48px;
+                            height: 48px;
+                            font-size: 20px;
+                            background: linear-gradient(135deg, var(--primary), #8B5CF6);
+                        }
+
+                        .recommended-subtitle {
+                            font-size: 1.125rem;
+                            color: var(--neutral-700);
+                            margin: 0;
+                        }
+
+                        /* Loading Styles */
+                        .loading-container {
+                            padding: 80px 0;
+                            text-align: center;
+                        }
+
+                        .loading-container-sm {
+                            padding: 40px 0;
+                            text-align: center;
+                        }
+
+                        .loading-spinner {
+                            display: inline-flex;
+                            flex-direction: column;
+                            align-items: center;
+                            gap: 16px;
+                        }
+
+                        .loading-spinner-sm {
+                            display: inline-flex;
+                            flex-direction: column;
+                            align-items: center;
+                            gap: 12px;
+                        }
+
+                        .spinner {
+                            width: 40px;
+                            height: 40px;
+                            border: 3px solid var(--neutral-200);
+                            border-top: 3px solid var(--heart);
+                            border-radius: 50%;
+                            animation: spin 1s linear infinite;
+                        }
+
+                        .spinner-sm {
+                            width: 24px;
+                            height: 24px;
+                            border: 2px solid var(--neutral-200);
+                            border-top: 2px solid var(--heart);
+                            border-radius: 50%;
+                            animation: spin 1s linear infinite;
+                        }
+
+                        @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+
+                        .loading-text {
+                            color: var(--neutral-500);
+                            font-size: 14px;
+                            margin: 0;
+                        }
+
+                        .loading-text-sm {
+                            color: var(--neutral-500);
+                            font-size: 12px;
+                            margin: 0;
+                        }
+
+                        /* Empty State */
+                        .empty-wishlist {
+                            text-align: center;
+                            padding: 80px 0;
+                        }
+
+                        .empty-wishlist-icon {
+                            width: 120px;
+                            height: 120px;
+                            background: linear-gradient(135deg, var(--neutral-50), var(--neutral-200));
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0 auto 32px;
+                            color: var(--heart);
+                            font-size: 48px;
+                        }
+
+                        .empty-wishlist-title {
+                            font-size: 1.5rem;
+                            font-weight: 600;
+                            color: var(--neutral-700);
+                            margin-bottom: 12px;
+                        }
+
+                        .empty-wishlist-text {
+                            color: var(--neutral-500);
+                            margin-bottom: 32px;
+                            font-size: 16px;
+                        }
+
+                        /* Error State */
+                        .error-state {
+                            text-align: center;
+                            padding: 80px 0;
+                        }
+
+                        .error-state-icon {
+                            width: 120px;
+                            height: 120px;
+                            background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0 auto 32px;
+                            color: #F59E0B;
+                            font-size: 48px;
+                        }
+
+                        .error-state-title {
+                            font-size: 1.5rem;
+                            font-weight: 600;
+                            color: var(--neutral-700);
+                            margin-bottom: 12px;
+                        }
+
+                        .error-state-text {
+                            color: var(--neutral-500);
+                            margin-bottom: 32px;
+                            font-size: 16px;
+                        }
+
+                        /* Premium Wishlist Cards */
+                        .premium-wishlist-card {
+                            background: var(--white);
+                            border-radius: 16px;
+                            border: 1px solid var(--neutral-200);
+                            overflow: hidden;
+                            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                            cursor: pointer;
+                            position: relative;
+                            height: 100%;
+                        }
+
+                        .premium-wishlist-card:hover {
+                            transform: translateY(-4px);
+                            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+                            border-color: var(--heart);
+                        }
+
+                        .wishlist-image-container {
+                            position: relative;
+                            height: 220px;
+                            overflow: hidden;
+                            background: linear-gradient(135deg, var(--neutral-50), #F8FAFC);
+                        }
+
+                        .wishlist-image {
+                            width: 100%;
+                            height: 100%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        }
+
+                        .wishlist-img {
+                            width: 100%;
+                            height: 100%;
+                            object-fit: contain;
+                            object-position: center;
+                            padding: 16px;
+                            transition: transform 0.3s ease;
+                        }
+
+                        .premium-wishlist-card:hover .wishlist-img {
+                            transform: scale(1.05);
+                        }
+
+                        .wishlist-placeholder {
+                            width: 80px;
+                            height: 80px;
+                            background: linear-gradient(135deg, var(--neutral-200), var(--neutral-500));
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: var(--white);
+                            font-size: 32px;
+                        }
+
+                        .wishlist-overlay {
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            right: 0;
+                            bottom: 0;
+                            background: linear-gradient(135deg, rgba(225, 29, 72, 0.8), rgba(236, 72, 153, 0.8));
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            opacity: 0;
+                            transition: opacity 0.3s ease;
+                        }
+
+                        .premium-wishlist-card:hover .wishlist-overlay {
+                            opacity: 1;
+                        }
+
+                        .wishlist-actions {
+                            display: flex;
+                            gap: 12px;
+                        }
+
+                        .action-btn {
+                            width: 44px;
+                            height: 44px;
+                            background: var(--white);
+                            border: none;
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            color: var(--neutral-700);
+                            font-size: 16px;
+                        }
+
+                        .action-btn:hover {
+                            background: var(--heart);
+                            color: var(--white);
+                            transform: scale(1.1);
+                        }
+
+                        .wishlist-info {
+                            padding: 20px;
+                        }
+
+                        .wishlist-category {
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            color: var(--neutral-500);
+                            font-size: 12px;
+                            font-weight: 500;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            margin-bottom: 8px;
+                        }
+
+                        .wishlist-category i {
+                            font-size: 10px;
+                        }
+
+                        .wishlist-name {
+                            font-size: 1.125rem;
+                            font-weight: 600;
+                            color: var(--neutral-900);
+                            margin-bottom: 8px;
+                            line-height: 1.3;
+                            display: -webkit-box;
+                            -webkit-line-clamp: 2;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                        }
+
+                        .wishlist-description {
+                            color: var(--neutral-500);
+                            font-size: 14px;
+                            line-height: 1.4;
+                            margin-bottom: 16px;
+                            display: -webkit-box;
+                            -webkit-line-clamp: 2;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                        }
+
+                        .wishlist-footer {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 16px;
+                        }
+
+                        .wishlist-price {
+                            font-size: 1.25rem;
+                            font-weight: 700;
+                            color: var(--primary);
+                            font-family: 'JetBrains Mono', monospace;
+                        }
+
+                        .stock-badge {
+                            padding: 4px 8px;
+                            border-radius: 20px;
+                            font-size: 11px;
+                            font-weight: 600;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                        }
+
+                        .stock-badge.in-stock {
+                            background: rgba(16, 185, 129, 0.1);
+                            color: var(--success);
+                        }
+
+                        .stock-badge.out-of-stock {
+                            background: rgba(239, 68, 68, 0.1);
+                            color: var(--danger);
+                        }
+
+                        .wishlist-buttons {
+                            display: flex;
+                            gap: 8px;
+                        }
+
+                        .wishlist-btn {
+                            flex: 1;
+                            padding: 8px 16px;
+                            border-radius: 8px;
+                            font-weight: 600;
+                            font-size: 12px;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            text-decoration: none;
+                            border: none;
+                        }
+
+                        .wishlist-btn-cart {
+                            background: var(--primary);
+                            color: var(--white);
+                        }
+
+                        .wishlist-btn-cart:hover:not(:disabled) {
+                            background: #2563EB;
+                            transform: translateY(-1px);
+                            color: var(--white);
+                        }
+
+                        .wishlist-btn-cart:disabled {
+                            opacity: 0.5;
+                            cursor: not-allowed;
+                        }
+
+                        .wishlist-btn-remove {
+                            background: transparent;
+                            color: var(--danger);
+                            border: 1px solid var(--danger);
+                        }
+
+                        .wishlist-btn-remove:hover {
+                            background: var(--danger);
+                            color: var(--white);
+                        }
+
+                        .out-of-stock-badge {
+                            position: absolute;
+                            top: 12px;
+                            right: 12px;
+                            background: var(--danger);
+                            color: var(--white);
+                            padding: 4px 12px;
+                            border-radius: 20px;
+                            font-size: 11px;
+                            font-weight: 600;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                        }
+
+                        /* Products Grid */
+                        .products-grid {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                            gap: 24px;
+                        }
+
+                        .wishlist-grid {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                            gap: 24px;
+                        }
+
+                        /* Premium Product Cards (same as product page) */
+                        .premium-product-card {
+                            background: var(--white);
+                            border-radius: 16px;
+                            border: 1px solid var(--neutral-200);
+                            overflow: hidden;
+                            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                            cursor: pointer;
+                            position: relative;
+                        }
+
+                        .premium-product-card:hover {
+                            transform: translateY(-4px);
+                            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+                            border-color: var(--primary);
+                        }
+
+                        .product-image-container {
+                            position: relative;
+                            height: 220px;
+                            overflow: hidden;
+                            background: linear-gradient(135deg, var(--neutral-50), #F8FAFC);
+                        }
+
+                        .product-image {
+                            width: 100%;
+                            height: 100%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        }
+
+                        .product-img {
+                            width: 100%;
+                            height: 100%;
+                            object-fit: contain;
+                            object-position: center;
+                            padding: 16px;
+                            transition: transform 0.3s ease;
+                        }
+
+                        .premium-product-card:hover .product-img {
+                            transform: scale(1.05);
+                        }
+
+                        .product-placeholder {
+                            width: 80px;
+                            height: 80px;
+                            background: linear-gradient(135deg, var(--neutral-200), var(--neutral-500));
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: var(--white);
+                            font-size: 32px;
+                        }
+
+                        .product-overlay {
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            right: 0;
+                            bottom: 0;
+                            background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(139, 92, 246, 0.8));
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            opacity: 0;
+                            transition: opacity 0.3s ease;
+                        }
+
+                        .premium-product-card:hover .product-overlay {
+                            opacity: 1;
+                        }
+
+                        .product-actions {
+                            display: flex;
+                            gap: 12px;
+                        }
+
+                        .product-info {
+                            padding: 20px;
+                        }
+
+                        .product-category {
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            color: var(--neutral-500);
+                            font-size: 12px;
+                            font-weight: 500;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            margin-bottom: 8px;
+                        }
+
+                        .product-category i {
+                            font-size: 10px;
+                        }
+
+                        .product-name {
+                            font-size: 1.125rem;
+                            font-weight: 600;
+                            color: var(--neutral-900);
+                            margin-bottom: 16px;
+                            line-height: 1.3;
+                            display: -webkit-box;
+                            -webkit-line-clamp: 2;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                        }
+
+                        .product-footer {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                        }
+
+                        .product-price {
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                        }
+
+                        .price {
+                            font-size: 1.25rem;
+                            font-weight: 700;
+                            color: var(--primary);
+                            font-family: 'JetBrains Mono', monospace;
+                        }
+
+                        .product-stock {
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                        }
+
+                        .stock-indicator {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 50%;
+                        }
+
+                        .stock-indicator.in-stock {
+                            background: var(--success);
+                        }
+
+                        .stock-indicator.low-stock {
+                            background: #F59E0B;
+                        }
+
+                        .stock-indicator.out-of-stock {
+                            background: var(--danger);
+                        }
+
+                        .stock-text {
+                            font-size: 12px;
+                            font-weight: 500;
+                            color: var(--neutral-500);
+                        }
+
+                        /* Responsive */
+                        @media (max-width: 991.98px) {
+                            .wishlist-title {
+                                font-size: 2rem;
+                            }
+
+                            .title-icon {
+                                width: 48px;
+                                height: 48px;
+                                font-size: 20px;
+                            }
+
+                            .products-grid,
+                            .wishlist-grid {
+                                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+                                gap: 20px;
+                            }
+
+                            .product-image-container,
+                            .wishlist-image-container {
+                                height: 200px;
+                            }
+                        }
+
+                        @media (max-width: 767.98px) {
+                            .wishlist-title {
+                                font-size: 1.75rem;
+                                flex-direction: column;
+                                text-align: center;
+                                gap: 12px;
+                            }
+
+                            .wishlist-title-section .d-flex {
+                                flex-direction: column;
+                                text-align: center;
+                                gap: 24px;
+                            }
+
+                            .wishlist-actions {
+                                justify-content: center;
+                                flex-wrap: wrap;
+                            }
+
+                            .products-grid,
+                            .wishlist-grid {
+                                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                                gap: 16px;
+                            }
+
+                            .wishlist-header {
+                                padding: 32px 0 40px;
+                            }
+
+                            .wishlist-content-section {
+                                padding: 40px 0;
+                            }
+
+                            .recommended-section {
+                                padding: 60px 0;
+                            }
+
+                            .product-image-container,
+                            .wishlist-image-container {
+                                height: 180px;
+                            }
+
+                            .product-info,
+                            .wishlist-info {
+                                padding: 16px;
+                            }
+
+                            .product-name,
+                            .wishlist-name {
+                                font-size: 1rem;
+                            }
+
+                            .price,
+                            .wishlist-price {
+                                font-size: 1.125rem;
+                            }
+                        }
+                    </style>
+                `;
+
+                // Hide skeleton when content is ready
+                if (typeof window.hideSkeleton === 'function') {
+                    window.hideSkeleton();
+                }
+
+                // Initialize wishlist features
+                initWishlistFeatures();
+            }
+        }
+
+        // Initialize wishlist features
+        function initWishlistFeatures() {
+            // Load wishlist data with premium design
+            loadWishlistData();
+
+            // Load recommended products
+            loadRecommendedProducts();
+
+            // Update wishlist counter
+            updateWishlistCounter();
+        }
+
+        // Load wishlist data from API
+        async function loadWishlistData() {
+            if (isLoading) return;
+
+            try {
+                isLoading = true;
+                showLoadingSpinner();
+
+                const response = await axios.get('/api/wishlist');
+
+                if (response.data.success) {
+                    wishlistData = response.data.data;
+                    renderPremiumWishlist();
+                } else {
+                    showErrorState();
+                }
+
+            } catch (error) {
+                console.error('Error loading wishlist:', error);
+                if (error.response && error.response.status === 401) {
+                    // Redirect to login if not authenticated
+                    window.location.href = '/auth/login';
+                } else {
+                    showErrorState();
+                }
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        // Enhanced render wishlist with premium design
+        function renderPremiumWishlist() {
+            const container = document.getElementById('wishlistContainer');
+
+            // Hide loading spinner and show container
+            document.getElementById('wishlistLoadingSpinner').style.display = 'none';
+            container.style.display = 'block';
+
+            if (wishlistData.length === 0) {
+                showEmptyState();
+                return;
+            }
+
+            // Show clear all button
+            document.getElementById('clearAllBtn').style.display = 'inline-flex';
+
+            container.innerHTML = `
+                <div class="wishlist-grid">
+                    ${wishlistData.filter(item => item && item.product).map(item => `
+                        <div class="premium-wishlist-card" data-product-id="${item.product.id}">
+                            <div class="wishlist-image-container" onclick="viewProduct(${item.product.id})">
+                                <div class="wishlist-image">
+                                    ${item.product.imageUrl ?
+                                        `<img src="${item.product.imageUrl}" alt="${escapeHtml(item.product.name || 'Sản phẩm')}" class="wishlist-img">` :
+                                        `<div class="wishlist-placeholder">
+                                             <i class="fas fa-microchip"></i>
+                                         </div>`
+                                    }
+                                </div>
+                                <div class="wishlist-overlay">
+                                    <div class="wishlist-actions">
+                                        <button class="action-btn view-btn" title="Xem chi tiết">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="action-btn cart-btn" title="Thêm vào giỏ" onclick="addToCartFromWishlist(event, ${item.product.id})" ${(item.product.stock || 0) <= 0 ? 'disabled' : ''}>
+                                            <i class="fas fa-shopping-cart"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                ${(item.product.stock || 0) <= 0 ? '<div class="out-of-stock-badge">Hết hàng</div>' : ''}
+                            </div>
+                            <div class="wishlist-info">
+                                <div class="wishlist-category">
+                                    <i class="fas fa-tag"></i>
+                                    <span>Electronics</span>
+                                </div>
+                                <h3 class="wishlist-name" onclick="viewProduct(${item.product.id})" style="cursor: pointer;">
+                                    ${escapeHtml(item.product.name || 'Không có tên')}
+                                </h3>
+                                <div class="wishlist-description">
+                                    ${item.product.description ?
+                                        (item.product.description.length > 80 ?
+                                            escapeHtml(item.product.description.substring(0, 80)) + '...' :
+                                            escapeHtml(item.product.description)) :
+                                        'Chưa có mô tả sản phẩm'}
+                                </div>
+                                <div class="wishlist-footer">
+                                    <div class="wishlist-price">${formatPrice(item.product.price || 0)}</div>
+                                    <div class="stock-badge ${(item.product.stock || 0) > 0 ? 'in-stock' : 'out-of-stock'}">
+                                        ${(item.product.stock || 0) > 0 ? 'Còn hàng' : 'Hết hàng'}
+                                    </div>
+                                </div>
+                                <div class="wishlist-buttons">
+                                    <button class="wishlist-btn wishlist-btn-cart" onclick="addToCartFromWishlist(event, ${item.product.id})"
+                                            ${(item.product.stock || 0) <= 0 ? 'disabled' : ''}>
+                                        <i class="fas fa-shopping-cart me-1"></i>
+                                        ${(item.product.stock || 0) <= 0 ? 'Hết hàng' : 'Thêm vào giỏ'}
+                                    </button>
+                                    <button class="wishlist-btn wishlist-btn-remove" onclick="removeFromWishlist(${item.product.id})" title="Xóa khỏi yêu thích">
+                                        <i class="fas fa-heart-broken me-1"></i>Xóa
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Load recommended products
+        async function loadRecommendedProducts() {
+            try {
+                const response = await axios.get('/api/products?page=0');
+
+                if (response.data.success) {
+                    const products = response.data.data.content.slice(0, 4); // Get 4 products
+                    renderRecommendedProducts(products);
+                } else {
+                    showNoRecommendedProducts();
+                }
+
+            } catch (error) {
+                console.error('Error loading recommended products:', error);
+                showNoRecommendedProducts();
+            }
+        }
+
+        // Render recommended products with premium design
+        function renderRecommendedProducts(products) {
+            const container = document.getElementById('recommendedProducts');
+            const loadingSpinner = document.getElementById('recommendedLoadingSpinner');
+
+            // Hide loading spinner
+            loadingSpinner.style.display = 'none';
+            container.style.display = 'block';
+
+            if (!products || products.length === 0) {
+                showNoRecommendedProducts();
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="products-grid">
+                    ${products.map(product => `
+                        <div class="premium-product-card" onclick="viewProduct(${product.id})">
+                            <div class="product-image-container">
+                                <div class="product-image">
+                                    ${product.imageUrl ?
+                                        `<img src="${product.imageUrl}" alt="${escapeHtml(product.name)}" class="product-img">` :
+                                        `<div class="product-placeholder">
+                                             <i class="fas fa-microchip"></i>
+                                         </div>`
+                                    }
+                                </div>
+                                <div class="product-overlay">
+                                    <div class="product-actions">
+                                        <button class="action-btn view-btn" title="Xem chi tiết">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="action-btn cart-btn" title="Thêm vào giỏ" onclick="addRecommendedToCart(event, ${product.id})">
+                                            <i class="fas fa-shopping-cart"></i>
+                                        </button>
+                                        <button class="action-btn wishlist-btn" title="Thêm vào yêu thích" onclick="addRecommendedToWishlist(event, ${product.id})">
+                                            <i class="fas fa-heart"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                ${product.stock > 0 ? '' : '<div class="out-of-stock-badge">Hết hàng</div>'}
+                            </div>
+                            <div class="product-info">
+                                <div class="product-category">
+                                    <i class="fas fa-tag"></i>
+                                    <span>Electronics</span>
+                                </div>
+                                <h3 class="product-name">${escapeHtml(product.name)}</h3>
+                                <div class="product-footer">
+                                    <div class="product-price">
+                                        <span class="price">${formatPrice(product.price)}</span>
+                                    </div>
+                                    <div class="product-stock">
+                                        <span class="stock-indicator ${product.stock > 10 ? 'in-stock' : product.stock > 0 ? 'low-stock' : 'out-of-stock'}"></span>
+                                        <span class="stock-text">
+                                            ${product.stock > 0 ? `Còn ${product.stock}` : 'Hết hàng'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Show no recommended products message
+        function showNoRecommendedProducts() {
+            const container = document.getElementById('recommendedProducts');
+            const loadingSpinner = document.getElementById('recommendedLoadingSpinner');
+
+            loadingSpinner.style.display = 'none';
+            container.style.display = 'block';
+
+            container.innerHTML = `
+                <div class="text-center py-5">
+                    <div class="empty-wishlist-icon" style="width: 80px; height: 80px; font-size: 32px; margin: 0 auto 24px;">
+                        <i class="fas fa-box-open"></i>
+                    </div>
+                    <h5 style="color: var(--neutral-700); margin-bottom: 12px;">Không có sản phẩm gợi ý</h5>
+                    <p style="color: var(--neutral-500);">Hãy khám phá tất cả sản phẩm của chúng tôi</p>
+                    <a href="/user/products" class="premium-btn premium-btn-continue mt-3">
+                        <i class="fas fa-search me-2"></i>Khám phá sản phẩm
+                    </a>
+                </div>
+            `;
+        }
+
+        // Action functions
+        function viewProduct(productId) {
+            window.location.href = `/user/products/${productId}`;
+        }
+
+        // Enhanced add to cart from wishlist
+        async function addToCartFromWishlist(event, productId) {
+            if (event) event.stopPropagation(); // Prevent card click
+
+            const product = wishlistData.find(item => item.product.id === productId)?.product;
+            if (product) {
+                // Use existing cart functionality
+                if (window.addToCartWithFeedback) {
+                    const result = window.addToCartWithFeedback(product, 1);
+
+                    if (result && result.success) {
+                        // Update button temporarily with premium style
+                        const button = event ? event.target.closest('button') : null;
+                        if (button) {
+                            const originalHTML = button.innerHTML;
+                            const originalStyle = button.style.cssText;
+
+                            button.innerHTML = '<i class="fas fa-check"></i>';
+                            button.style.background = 'var(--success)';
+                            button.style.color = 'var(--white)';
+
+                            setTimeout(() => {
+                                button.innerHTML = originalHTML;
+                                button.style.cssText = originalStyle;
+                            }, 1500);
+                        }
+                    }
+                } else if (window.cartService) {
+                    // Fallback to direct cart service
+                    const result = window.cartService.addItem(product, 1);
+
+                    if (result.success && window.showWishlistNotification) {
+                        window.showWishlistNotification('success', result.message);
+                    }
+                } else {
+                    console.log('No cart service available');
+                }
+            }
+        }
+
+        // Enhanced remove from wishlist
+        async function removeFromWishlist(productId) {
+            try {
+                // Add loading state to remove button
+                const removeBtn = document.querySelector(`[data-product-id="${productId}"] .wishlist-btn-remove`);
+                if (removeBtn) {
+                    const originalHTML = removeBtn.innerHTML;
+                    removeBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Đang xóa...';
+                    removeBtn.disabled = true;
+                }
+
+                // Use WishlistService if available
+                if (window.wishlistService) {
+                    const result = await window.wishlistService.removeFromWishlist(productId);
+
+                    if (result.success) {
+                        // Remove item from local data and re-render
+                        wishlistData = wishlistData.filter(item => item.product.id !== productId);
+                        renderPremiumWishlist();
+                        updateWishlistCounter();
+
+                        if (window.showWishlistNotification) {
+                            window.showWishlistNotification('success', result.message);
+                        }
+                    } else {
+                        if (window.showWishlistNotification) {
+                            window.showWishlistNotification('error', result.message);
+                        }
+                        // Reset button state on error
+                        if (removeBtn) {
+                            removeBtn.innerHTML = originalHTML;
+                            removeBtn.disabled = false;
+                        }
+                    }
+                } else {
+                    // Fallback to direct API call
+                    const response = await axios.delete(`/api/wishlist/${productId}`);
+
+                    if (response.data.success) {
+                        wishlistData = wishlistData.filter(item => item.product.id !== productId);
+                        renderPremiumWishlist();
+                        updateWishlistCounter();
+                        showAlert('success', response.data.message);
+                    } else {
+                        showAlert('error', response.data.message);
+                        if (removeBtn) {
+                            removeBtn.innerHTML = originalHTML;
+                            removeBtn.disabled = false;
+                        }
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error removing from wishlist:', error);
+                showAlert('error', 'Không thể xóa sản phẩm khỏi danh sách yêu thích');
+            }
+        }
+
+        // Enhanced clear wishlist
+        async function clearWishlist() {
+            if (wishlistData.length === 0) return;
+
+            if (!confirm('Bạn có chắc muốn xóa toàn bộ danh sách yêu thích không?')) {
+                return;
+            }
+
+            try {
+                // Add loading state to clear button
+                const clearBtn = document.getElementById('clearAllBtn');
+                if (clearBtn) {
+                    const originalHTML = clearBtn.innerHTML;
+                    clearBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Đang xóa...';
+                    clearBtn.disabled = true;
+                }
+
+                // Use WishlistService if available
+                if (window.wishlistService) {
+                    const result = await window.wishlistService.clearWishlist();
+
+                    if (result.success) {
+                        wishlistData = [];
+                        renderPremiumWishlist();
+                        updateWishlistCounter();
+
+                        if (window.showWishlistNotification) {
+                            window.showWishlistNotification('success', result.message);
+                        }
+                    } else {
+                        if (window.showWishlistNotification) {
+                            window.showWishlistNotification('error', result.message);
+                        }
+                        if (clearBtn) {
+                            clearBtn.innerHTML = originalHTML;
+                            clearBtn.disabled = false;
+                        }
+                    }
+                } else {
+                    // Fallback to direct API call
+                    const response = await axios.delete('/api/wishlist/clear');
+
+                    if (response.data.success) {
+                        wishlistData = [];
+                        renderPremiumWishlist();
+                        updateWishlistCounter();
+                        showAlert('success', response.data.message);
+                    } else {
+                        showAlert('error', response.data.message);
+                        if (clearBtn) {
+                            clearBtn.innerHTML = originalHTML;
+                            clearBtn.disabled = false;
+                        }
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error clearing wishlist:', error);
+                showAlert('error', 'Không thể xóa danh sách yêu thích');
+            }
+        }
+
+        // Add recommended product to cart
+        async function addRecommendedToCart(event, productId) {
+            event.stopPropagation(); // Prevent card click
+
+            try {
+                // Get product details
+                const response = await axios.get(`/api/products/${productId}`);
+
+                if (response.data.success) {
+                    const product = response.data.data;
+
+                    // Use existing cart functionality
+                    if (window.addToCartWithFeedback) {
+                        const result = window.addToCartWithFeedback(product, 1);
+
+                        if (result && result.success) {
+                            // Update button temporarily with premium style
+                            const button = event.target.closest('button');
+                            if (button) {
+                                const originalHTML = button.innerHTML;
+                                const originalClass = button.className;
+
+                                button.innerHTML = '<i class="fas fa-check"></i>';
+                                button.style.background = 'var(--success)';
+                                button.style.color = 'var(--white)';
+
+                                setTimeout(() => {
+                                    button.innerHTML = originalHTML;
+                                    button.className = originalClass;
+                                    button.style.background = '';
+                                    button.style.color = '';
+                                }, 1500);
+                            }
+                        }
+                    } else if (window.cartService) {
+                        // Fallback to direct cart service
+                        const result = window.cartService.addItem(product, 1);
+
+                        if (result.success && window.showWishlistNotification) {
+                            window.showWishlistNotification('success', result.message);
+                        }
+                    }
+                } else {
+                    console.error('Product not found');
+                    showAlert('error', 'Không thể tải thông tin sản phẩm');
+                }
+
+            } catch (error) {
+                console.error('Error adding recommended product to cart:', error);
+                showAlert('error', 'Không thể thêm sản phẩm vào giỏ hàng');
+            }
+        }
+
+        // Add recommended product to wishlist
+        async function addRecommendedToWishlist(event, productId) {
+            event.stopPropagation(); // Prevent card click
+
+            try {
+                // Use WishlistService if available
+                if (window.addToWishlistGlobal) {
+                    const result = await window.addToWishlistGlobal(productId);
+
+                    if (result.success) {
+                        // Update button temporarily with premium style
+                        const button = event.target.closest('button');
+                        if (button) {
+                            const originalHTML = button.innerHTML;
+                            const originalStyle = button.style.cssText;
+
+                            button.innerHTML = '<i class="fas fa-heart"></i>';
+                            button.style.background = 'var(--heart)';
+                            button.style.color = 'var(--white)';
+
+                            setTimeout(() => {
+                                button.innerHTML = originalHTML;
+                                button.style.cssText = originalStyle;
+                            }, 1500);
+                        }
+
+                        // Refresh wishlist data
+                        loadWishlistData();
+                    }
+                } else {
+                    // Fallback to direct API call
+                    const response = await axios.post(`/api/wishlist/${productId}`);
+
+                    if (response.data.success) {
+                        showAlert('success', response.data.message);
+                        // Refresh wishlist data
+                        loadWishlistData();
+                    } else {
+                        showAlert('error', response.data.message);
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error adding recommended product to wishlist:', error);
+                const message = error.response && error.response.status === 401
+                    ? 'Vui lòng đăng nhập để sử dụng chức năng này'
+                    : 'Không thể thêm vào danh sách yêu thích';
+                showAlert('error', message);
+            }
+        }
+
+        // Enhanced update wishlist counter
+        async function updateWishlistCounter() {
+            try {
+                // Use WishlistService if available
+                if (window.wishlistService) {
+                    await window.wishlistService.updateCounter();
+                } else {
+                    // Fallback to direct API call
+                    const response = await axios.get('/api/wishlist/count');
+                    if (response.data.success) {
+                        const counter = document.getElementById('wishlistCounter');
+                        if (counter) {
+                            const count = response.data.data;
+                            if (count > 0) {
+                                counter.textContent = count;
+                                counter.style.display = 'inline';
+                            } else {
+                                counter.style.display = 'none';
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.log('Error updating wishlist counter');
+            }
+        }
+
+        // UI State functions
+        function showLoadingSpinner() {
+            document.getElementById('wishlistLoadingSpinner').style.display = 'block';
+            document.getElementById('wishlistContainer').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'none';
+            document.getElementById('clearAllBtn').style.display = 'none';
+        }
+
+        function hideLoadingSpinner() {
+            document.getElementById('wishlistLoadingSpinner').style.display = 'none';
+            document.getElementById('wishlistContainer').style.display = 'block';
+        }
+
+        function showEmptyState() {
+            document.getElementById('wishlistLoadingSpinner').style.display = 'none';
+            document.getElementById('wishlistContainer').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('errorState').style.display = 'none';
+            document.getElementById('clearAllBtn').style.display = 'none';
+        }
+
+        function showErrorState() {
+            document.getElementById('wishlistLoadingSpinner').style.display = 'none';
+            document.getElementById('wishlistContainer').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'block';
+            document.getElementById('clearAllBtn').style.display = 'none';
+        }
+
+        // Utility functions (keeping existing wishlist.js functions available)
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(price);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        function showAlert(type, message) {
+            // Try to use existing notification systems
+            if (window.showWishlistNotification) {
+                window.showWishlistNotification(type, message);
+            } else if (window.showCartNotification) {
+                window.showCartNotification(type, message);
+            } else {
+                // Fallback to simple alert
+                alert(message);
+            }
+        }
+
+        // Load page when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            loadWishlistPage();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thông tin cá nhân - Electronic Store</title>
+    <!-- Load Bootstrap and required libraries first -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Enhanced function to load user layout with proper script execution
+        async function loadLayoutWithScripts(layoutUrl, contentLoader, activeNavPage) {
+            try {
+                console.log('Loading user layout...');
+
+                // Fetch the user layout
+                const response = await fetch(layoutUrl);
+                const layoutHtml = await response.text();
+
+                // Create a temporary container to parse the HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+
+                // Extract and execute scripts manually
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout into container
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually to ensure they run
+                const scriptsToLoad = [];
+                scripts.forEach(script => {
+                    if (script.src) {
+                        // Check if the script functionality is actually available
+                        const srcPath = script.src.includes('://') ? script.src : new URL(script.src, window.location.origin).href;
+                        let shouldLoad = true;
+
+                        // Special checks for specific libraries
+                        if (script.src.includes('bootstrap')) {
+                            shouldLoad = typeof bootstrap === 'undefined';
+                        } else if (script.src.includes('axios')) {
+                            shouldLoad = typeof axios === 'undefined';
+                        } else {
+                            shouldLoad = !document.querySelector(`script[src="${srcPath}"]`) && !document.querySelector(`script[src="${script.src}"]`);
+                        }
+
+                        if (shouldLoad) {
+                            scriptsToLoad.push(script);
+                        } else {
+                            console.log('Script already loaded, skipping:', script.src);
+                        }
+                    } else {
+                        // Inline script - always add but with hash check
+                        const scriptContent = script.textContent.trim();
+                        if (scriptContent) {
+                            const hash = scriptContent.length + '_' + scriptContent.substring(0, 10).replace(/[^a-zA-Z0-9]/g, '');
+                            if (!document.querySelector(`script[data-inline-hash="${hash}"]`)) {
+                                scriptsToLoad.push(script);
+                            }
+                        }
+                    }
+                });
+
+                // Load scripts sequentially to ensure proper initialization
+                let loadedCount = 0;
+                function loadNextScript() {
+                    if (loadedCount >= scriptsToLoad.length) {
+                        initializeAfterScriptsLoaded();
+                        return;
+                    }
+
+                    const script = scriptsToLoad[loadedCount];
+                    if (script.src) {
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        newScript.onload = () => {
+                            console.log('External script loaded:', script.src);
+                            loadedCount++;
+                            loadNextScript();
+                        };
+                        newScript.onerror = () => {
+                            console.error('Failed to load script:', script.src);
+                            loadedCount++;
+                            loadNextScript();
+                        };
+                        document.head.appendChild(newScript);
+                    } else {
+                        const scriptContent = script.textContent.trim();
+                        if (scriptContent) {
+                            // Execute inline script properly
+                            try {
+                                // Use Function constructor for better error handling and scope
+                                const scriptFunction = new Function(scriptContent);
+                                scriptFunction();
+                                console.log('Inline script executed successfully');
+                            } catch (error) {
+                                console.error('Error executing inline script:', error);
+                                // Fallback to eval if Function constructor fails
+                                try {
+                                    eval(scriptContent);
+                                    console.log('Inline script executed via eval fallback');
+                                } catch (evalError) {
+                                    console.error('Error in eval fallback:', evalError);
+                                }
+                            }
+                        }
+                        loadedCount++;
+                        setTimeout(loadNextScript, 10); // Small delay for inline scripts
+                    }
+                }
+
+                loadNextScript();
+
+                function initializeAfterScriptsLoaded() {
+                    // Wait a bit for all scripts to initialize
+                    setTimeout(() => {
+                        console.log('Initializing after all scripts loaded');
+
+                        // Check if Bootstrap is available
+                        if (typeof bootstrap !== 'undefined') {
+                            // Initialize Bootstrap dropdowns
+                            const dropdownElementList = document.querySelectorAll('.dropdown-toggle');
+                            const dropdownList = [...dropdownElementList].map(dropdownToggleEl => {
+                                return new bootstrap.Dropdown(dropdownToggleEl);
+                            });
+                            console.log('Bootstrap dropdowns initialized:', dropdownList.length);
+                        } else {
+                            console.error('Bootstrap not available');
+                        }
+
+                        // Set active navigation if specified
+                        if (activeNavPage) {
+                            const navLinks = document.querySelectorAll('.premium-nav-link');
+                            navLinks.forEach(link => {
+                                if (link.getAttribute('href').includes(activeNavPage)) {
+                                    link.classList.add('active');
+                                }
+                            });
+                        }
+
+                        // Setup logout button manually
+                        const logoutBtn = document.getElementById('logoutBtn');
+                        if (logoutBtn && window.Auth) {
+                            logoutBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+                                    window.Auth.logout();
+                                }
+                            });
+                            console.log('Logout button handler attached manually');
+                        }
+
+                        // Load page-specific content
+                        if (contentLoader) {
+                            contentLoader();
+                        }
+                    }, 300);
+                }
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load page content
+        async function loadPageContent() {
+            console.log('=== LOAD PAGE CONTENT CALLED ===');
+            try {
+                console.log('Fetching user data from /user/profile/data');
+                // Get current user data
+                const userResponse = await fetch('/user/profile/data');
+                let userData = {};
+
+                if (userResponse.ok) {
+                    const result = await userResponse.json();
+                    if (result.success) {
+                        userData = result.data;
+                    }
+                }
+
+                const contentHtml = `
+                    <!-- Profile Page Header -->
+                    <section class="profile-header">
+                        <div class="container">
+                            <!-- Breadcrumb -->
+                            <nav aria-label="breadcrumb" class="premium-breadcrumb">
+                                <ol class="breadcrumb">
+                                    <li class="breadcrumb-item">
+                                        <a href="/user/home">
+                                            <i class="fas fa-home me-1"></i>Trang chủ
+                                        </a>
+                                    </li>
+                                    <li class="breadcrumb-item active" aria-current="page">
+                                        <i class="fas fa-user-circle me-1"></i>Thông tin cá nhân
+                                    </li>
+                                </ol>
+                            </nav>
+
+                            <!-- Page Title -->
+                            <div class="profile-title-section">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h1 class="profile-title">
+                                            <span class="title-icon">
+                                                <i class="fas fa-user-circle"></i>
+                                            </span>
+                                            Thông tin cá nhân
+                                        </h1>
+                                        <p class="profile-subtitle">
+                                            Quản lý thông tin cá nhân và tài khoản của bạn
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Profile Content Section -->
+                    <section class="profile-content-section">
+                        <div class="container">
+                            <div class="row g-4">
+                                <!-- Profile Information Card -->
+                                <div class="col-xl-8">
+                                    <div class="premium-profile-card">
+                                        <div class="profile-card-header">
+                                            <h3 class="profile-card-title">
+                                                <span class="profile-card-icon">
+                                                    <i class="fas fa-user"></i>
+                                                </span>
+                                                Thông tin cá nhân
+                                            </h3>
+                                            <p class="profile-card-subtitle">Cập nhật thông tin của bạn</p>
+                                        </div>
+
+                                        <div class="profile-card-body">
+                                            <!-- Alert messages -->
+                                            <div id="alertContainer"></div>
+
+                                            <!-- Profile Form -->
+                                            <form id="profileForm" class="premium-form">
+                                                <div class="row g-4">
+                                                    <div class="col-md-6">
+                                                        <div class="premium-form-group">
+                                                            <label for="username" class="premium-form-label">
+                                                                <i class="fas fa-at me-2"></i>Tên đăng nhập
+                                                            </label>
+                                                            <input type="text" class="premium-form-control" id="username"
+                                                                   value="${userData.username || ''}" readonly>
+                                                            <div class="form-help-text">Không thể thay đổi tên đăng nhập</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="premium-form-group">
+                                                            <label for="fullName" class="premium-form-label">
+                                                                <i class="fas fa-user me-2"></i>Tên đầy đủ <span class="required">*</span>
+                                                            </label>
+                                                            <input type="text" class="premium-form-control" id="fullName"
+                                                                   value="${userData.fullName || ''}" required>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="row g-4">
+                                                    <div class="col-md-6">
+                                                        <div class="premium-form-group">
+                                                            <label for="email" class="premium-form-label">
+                                                                <i class="fas fa-envelope me-2"></i>Email <span class="required">*</span>
+                                                            </label>
+                                                            <input type="email" class="premium-form-control" id="email"
+                                                                   value="${userData.email || ''}" required>
+                                                            <div class="invalid-feedback"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="premium-form-group">
+                                                            <label for="phone" class="premium-form-label">
+                                                                <i class="fas fa-phone me-2"></i>Số điện thoại
+                                                            </label>
+                                                            <input type="tel" class="premium-form-control" id="phone"
+                                                                   value="${userData.phone || ''}">
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="premium-form-group">
+                                                    <label for="address" class="premium-form-label">
+                                                        <i class="fas fa-map-marker-alt me-2"></i>Địa chỉ
+                                                    </label>
+                                                    <textarea class="premium-form-control" id="address" rows="4">${userData.address || ''}</textarea>
+                                                </div>
+
+                                                <div class="form-actions">
+                                                    <button type="submit" class="premium-btn premium-btn-primary">
+                                                        <i class="fas fa-save me-2"></i>Lưu thay đổi
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+
+                                    <!-- Change Password Card -->
+                                    <div class="premium-profile-card">
+                                        <div class="profile-card-header">
+                                            <h3 class="profile-card-title">
+                                                <span class="profile-card-icon">
+                                                    <i class="fas fa-lock"></i>
+                                                </span>
+                                                Đổi mật khẩu
+                                            </h3>
+                                            <p class="profile-card-subtitle">Cập nhật mật khẩu bảo mật</p>
+                                        </div>
+
+                                        <div class="profile-card-body">
+                                            <form id="passwordForm" class="premium-form">
+                                                <div class="premium-form-group">
+                                                    <label for="currentPassword" class="premium-form-label">
+                                                        <i class="fas fa-key me-2"></i>Mật khẩu hiện tại <span class="required">*</span>
+                                                    </label>
+                                                    <input type="password" class="premium-form-control" id="currentPassword" required>
+                                                </div>
+
+                                                <div class="row g-4">
+                                                    <div class="col-md-6">
+                                                        <div class="premium-form-group">
+                                                            <label for="newPassword" class="premium-form-label">
+                                                                <i class="fas fa-shield-alt me-2"></i>Mật khẩu mới <span class="required">*</span>
+                                                            </label>
+                                                            <input type="password" class="premium-form-control" id="newPassword"
+                                                                   minlength="6" required>
+                                                            <div class="form-help-text">Tối thiểu 6 ký tự</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="premium-form-group">
+                                                            <label for="confirmPassword" class="premium-form-label">
+                                                                <i class="fas fa-check-shield me-2"></i>Xác nhận mật khẩu mới <span class="required">*</span>
+                                                            </label>
+                                                            <input type="password" class="premium-form-control" id="confirmPassword"
+                                                                   minlength="6" required>
+                                                            <div class="invalid-feedback"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="form-actions">
+                                                    <button type="submit" class="premium-btn premium-btn-warning">
+                                                        <i class="fas fa-key me-2"></i>Đổi mật khẩu
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Sidebar -->
+                                <div class="col-xl-4">
+                                    <div class="profile-sidebar">
+                                        <!-- User Summary Card -->
+                                        <div class="premium-profile-card user-summary-card">
+                                            <div class="user-avatar-section">
+                                                <div class="user-avatar">
+                                                    <i class="fas fa-user-circle"></i>
+                                                </div>
+                                                <div class="user-info">
+                                                    <h4 class="user-name">${userData.fullName || userData.username || 'Người dùng'}</h4>
+                                                    <p class="user-email">${userData.email || ''}</p>
+                                                    <span class="user-badge">Thành viên</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Quick Actions -->
+                                        <div class="premium-profile-card">
+                                            <div class="profile-card-header">
+                                                <h4 class="profile-card-title">
+                                                    <span class="profile-card-icon">
+                                                        <i class="fas fa-bolt"></i>
+                                                    </span>
+                                                    Thao tác nhanh
+                                                </h4>
+                                            </div>
+                                            <div class="profile-card-body">
+                                                <div class="quick-actions">
+                                                    <a href="/user/orders" class="quick-action-item">
+                                                        <div class="quick-action-icon">
+                                                            <i class="fas fa-history"></i>
+                                                        </div>
+                                                        <div class="quick-action-content">
+                                                            <h5>Lịch sử đơn hàng</h5>
+                                                            <p>Xem các đơn hàng đã đặt</p>
+                                                        </div>
+                                                    </a>
+                                                    <a href="/user/wishlist" class="quick-action-item">
+                                                        <div class="quick-action-icon">
+                                                            <i class="fas fa-heart"></i>
+                                                        </div>
+                                                        <div class="quick-action-content">
+                                                            <h5>Danh sách yêu thích</h5>
+                                                            <p>Sản phẩm đã lưu</p>
+                                                        </div>
+                                                    </a>
+                                                    <a href="/user/cart" class="quick-action-item">
+                                                        <div class="quick-action-icon">
+                                                            <i class="fas fa-shopping-cart"></i>
+                                                        </div>
+                                                        <div class="quick-action-content">
+                                                            <h5>Giỏ hàng</h5>
+                                                            <p>Sản phẩm chờ thanh toán</p>
+                                                        </div>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Recommended Products Section -->
+                            <section id="recommendedSection" class="recommended-section" style="display: none;">
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="section-header text-center">
+                                            <h2 class="section-title">
+                                                <span class="title-icon">
+                                                    <i class="fas fa-star"></i>
+                                                </span>
+                                                Sản phẩm đề xuất
+                                            </h2>
+                                            <p class="section-subtitle">Khám phá những sản phẩm phù hợp với bạn</p>
+                                        </div>
+
+                                        <!-- Loading Spinner for Recommendations -->
+                                        <div id="recommendedLoadingSpinner" class="loading-container">
+                                            <div class="loading-spinner">
+                                                <div class="spinner"></div>
+                                                <p class="loading-text">Đang tải sản phẩm đề xuất...</p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Recommended Products Container -->
+                                        <div id="recommendedProductsContainer" class="products-grid" style="display: none;">
+                                            <!-- Products will be loaded here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    </section>
+
+                    <style>
+                        /* Profile Page Styles with Premium Color Scheme */
+                        :root {
+                            --neutral-900: #121212;  /* Text chính (heading) */
+                            --neutral-700: #2E2E2E;  /* Text body, nhãn phụ */
+                            --neutral-500: #9E9E9E;  /* Placeholder, text phụ */
+                            --neutral-200: #E0E0E0;  /* Border, divider */
+                            --neutral-50: #FAFAFA;   /* Background sáng */
+                            --white: #FFFFFF;        /* Nền chính */
+                            --primary: #3B82F6;      /* Primary color */
+                            --success: #10B981;      /* Success color */
+                            --warning: #F59E0B;      /* Warning color */
+                            --danger: #EF4444;       /* Danger color */
+                            --info: #06B6D4;         /* Info color */
+                        }
+
+                        /* Profile Header */
+                        .profile-header {
+                            padding: 40px 0 60px;
+                            background: linear-gradient(135deg, var(--neutral-50) 0%, #F8FAFC 100%);
+                            border-bottom: 1px solid var(--neutral-200);
+                        }
+
+                        .premium-breadcrumb {
+                            margin-bottom: 32px;
+                        }
+
+                        .premium-breadcrumb .breadcrumb {
+                            background: none;
+                            padding: 0;
+                            margin: 0;
+                            font-size: 14px;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item {
+                            font-weight: 500;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item a {
+                            color: var(--neutral-500);
+                            text-decoration: none;
+                            transition: color 0.3s ease;
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item a:hover {
+                            color: var(--primary);
+                        }
+
+                        .premium-breadcrumb .breadcrumb-item.active {
+                            color: var(--neutral-700);
+                            font-weight: 600;
+                        }
+
+                        .profile-title-section {
+                            margin-bottom: 0;
+                        }
+
+                        .profile-title {
+                            font-size: 2.5rem;
+                            font-weight: 700;
+                            color: var(--neutral-900);
+                            margin-bottom: 12px;
+                            display: flex;
+                            align-items: center;
+                            letter-spacing: -0.025em;
+                        }
+
+                        .title-icon {
+                            width: 56px;
+                            height: 56px;
+                            background: linear-gradient(135deg, var(--primary), #8B5CF6);
+                            border-radius: 14px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-right: 16px;
+                            color: var(--white);
+                            font-size: 24px;
+                        }
+
+                        .profile-subtitle {
+                            font-size: 1.125rem;
+                            color: var(--neutral-700);
+                            margin: 0;
+                        }
+
+                        /* Content Section */
+                        .profile-content-section {
+                            padding: 60px 0;
+                            background: var(--white);
+                        }
+
+                        /* Premium Profile Cards */
+                        .premium-profile-card {
+                            background: var(--white);
+                            border-radius: 16px;
+                            border: 1px solid var(--neutral-200);
+                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                            margin-bottom: 24px;
+                            overflow: hidden;
+                            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                        }
+
+                        .premium-profile-card:hover {
+                            transform: translateY(-2px);
+                            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+                            border-color: var(--primary);
+                        }
+
+                        .profile-card-header {
+                            padding: 24px 32px;
+                            background: linear-gradient(135deg, var(--neutral-50), #F8FAFC);
+                            border-bottom: 1px solid var(--neutral-200);
+                        }
+
+                        .profile-card-title {
+                            font-size: 1.25rem;
+                            font-weight: 700;
+                            color: var(--neutral-900);
+                            margin-bottom: 8px;
+                            display: flex;
+                            align-items: center;
+                        }
+
+                        .profile-card-icon {
+                            width: 40px;
+                            height: 40px;
+                            background: linear-gradient(135deg, var(--info), #0EA5E9);
+                            border-radius: 10px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-right: 12px;
+                            color: var(--white);
+                            font-size: 16px;
+                        }
+
+                        .profile-card-subtitle {
+                            color: var(--neutral-500);
+                            font-size: 14px;
+                            margin: 0;
+                        }
+
+                        .profile-card-body {
+                            padding: 32px;
+                        }
+
+                        /* Premium Form Styles */
+                        .premium-form {
+                            margin: 0;
+                        }
+
+                        .premium-form-group {
+                            margin-bottom: 24px;
+                        }
+
+                        .premium-form-label {
+                            display: flex;
+                            align-items: center;
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: var(--neutral-700);
+                            margin-bottom: 8px;
+                        }
+
+                        .required {
+                            color: var(--danger);
+                            margin-left: 4px;
+                        }
+
+                        .premium-form-control {
+                            width: 100%;
+                            padding: 12px 16px;
+                            border: 1px solid var(--neutral-200);
+                            border-radius: 8px;
+                            font-size: 14px;
+                            color: var(--neutral-900);
+                            background: var(--white);
+                            transition: all 0.3s ease;
+                        }
+
+                        .premium-form-control:focus {
+                            outline: none;
+                            border-color: var(--primary);
+                            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+                        }
+
+                        .premium-form-control:read-only {
+                            background: var(--neutral-50);
+                            color: var(--neutral-500);
+                            cursor: not-allowed;
+                        }
+
+                        .premium-form-control.is-invalid {
+                            border-color: var(--danger);
+                            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+                        }
+
+                        .form-help-text {
+                            font-size: 12px;
+                            color: var(--neutral-500);
+                            margin-top: 4px;
+                        }
+
+                        .invalid-feedback {
+                            display: block;
+                            font-size: 12px;
+                            color: var(--danger);
+                            margin-top: 4px;
+                        }
+
+                        .form-actions {
+                            display: flex;
+                            justify-content: flex-end;
+                            gap: 12px;
+                            margin-top: 32px;
+                            padding-top: 24px;
+                            border-top: 1px solid var(--neutral-200);
+                        }
+
+                        /* Premium Buttons */
+                        .premium-btn {
+                            padding: 12px 24px;
+                            border-radius: 8px;
+                            font-weight: 600;
+                            font-size: 14px;
+                            border: none;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            display: inline-flex;
+                            align-items: center;
+                            justify-content: center;
+                            text-decoration: none;
+                        }
+
+                        .premium-btn-primary {
+                            background: linear-gradient(135deg, var(--primary), #8B5CF6);
+                            color: var(--white);
+                        }
+
+                        .premium-btn-primary:hover {
+                            transform: translateY(-1px);
+                            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                            color: var(--white);
+                        }
+
+                        .premium-btn-warning {
+                            background: linear-gradient(135deg, var(--warning), #F97316);
+                            color: var(--white);
+                        }
+
+                        .premium-btn-warning:hover {
+                            transform: translateY(-1px);
+                            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+                            color: var(--white);
+                        }
+
+                        /* User Summary Card */
+                        .user-summary-card .profile-card-body {
+                            padding: 0;
+                        }
+
+                        .user-avatar-section {
+                            padding: 32px;
+                            text-align: center;
+                            background: linear-gradient(135deg, var(--neutral-50), #F8FAFC);
+                        }
+
+                        .user-avatar {
+                            width: 80px;
+                            height: 80px;
+                            border-radius: 50%;
+                            background: linear-gradient(135deg, var(--primary), #8B5CF6);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0 auto 16px;
+                            color: var(--white);
+                            font-size: 32px;
+                        }
+
+                        .user-name {
+                            font-size: 1.25rem;
+                            font-weight: 700;
+                            color: var(--neutral-900);
+                            margin-bottom: 4px;
+                        }
+
+                        .user-email {
+                            color: var(--neutral-500);
+                            font-size: 14px;
+                            margin-bottom: 12px;
+                        }
+
+                        .user-badge {
+                            display: inline-flex;
+                            align-items: center;
+                            padding: 4px 12px;
+                            background: rgba(16, 185, 129, 0.1);
+                            color: var(--success);
+                            border-radius: 20px;
+                            font-size: 12px;
+                            font-weight: 600;
+                        }
+
+                        /* Quick Actions */
+                        .quick-actions {
+                            display: flex;
+                            flex-direction: column;
+                            gap: 12px;
+                        }
+
+                        .quick-action-item {
+                            display: flex;
+                            align-items: center;
+                            gap: 16px;
+                            padding: 16px;
+                            border-radius: 12px;
+                            border: 1px solid var(--neutral-200);
+                            background: var(--white);
+                            text-decoration: none;
+                            transition: all 0.3s ease;
+                        }
+
+                        .quick-action-item:hover {
+                            background: var(--neutral-50);
+                            border-color: var(--primary);
+                            transform: translateX(4px);
+                        }
+
+                        .quick-action-icon {
+                            width: 40px;
+                            height: 40px;
+                            background: linear-gradient(135deg, var(--neutral-200), var(--neutral-500));
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: var(--white);
+                            font-size: 16px;
+                            flex-shrink: 0;
+                        }
+
+                        .quick-action-content h5 {
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: var(--neutral-900);
+                            margin-bottom: 2px;
+                        }
+
+                        .quick-action-content p {
+                            font-size: 12px;
+                            color: var(--neutral-500);
+                            margin: 0;
+                        }
+
+                        /* Recommended Products Section */
+                        .recommended-section {
+                            margin-top: 60px;
+                            padding-top: 60px;
+                            border-top: 1px solid var(--neutral-200);
+                        }
+
+                        .section-header {
+                            margin-bottom: 48px;
+                        }
+
+                        .section-title {
+                            font-size: 2rem;
+                            font-weight: 700;
+                            color: var(--neutral-900);
+                            margin-bottom: 12px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            gap: 16px;
+                        }
+
+                        .section-title .title-icon {
+                            width: 48px;
+                            height: 48px;
+                            background: linear-gradient(135deg, var(--warning), #F97316);
+                            font-size: 20px;
+                        }
+
+                        .section-subtitle {
+                            font-size: 1rem;
+                            color: var(--neutral-500);
+                            margin: 0;
+                        }
+
+                        .products-grid {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                            gap: 24px;
+                        }
+
+                        /* Premium Product Cards for Recommended Section */
+                        .premium-product-card {
+                            background: var(--white);
+                            border-radius: 16px;
+                            border: 1px solid var(--neutral-200);
+                            overflow: hidden;
+                            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                            position: relative;
+                        }
+
+                        .premium-product-card:hover {
+                            transform: translateY(-4px);
+                            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+                            border-color: var(--primary);
+                        }
+
+                        .product-card-image {
+                            position: relative;
+                            height: 220px;
+                            overflow: hidden;
+                            background: var(--neutral-50);
+                        }
+
+                        .product-card-image img {
+                            width: 100%;
+                            height: 100%;
+                            object-fit: cover;
+                            transition: transform 0.3s ease;
+                        }
+
+                        .premium-product-card:hover .product-card-image img {
+                            transform: scale(1.05);
+                        }
+
+                        .product-card-overlay {
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            right: 0;
+                            bottom: 0;
+                            background: rgba(0, 0, 0, 0.6);
+                            opacity: 0;
+                            transition: opacity 0.3s ease;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        }
+
+                        .premium-product-card:hover .product-card-overlay {
+                            opacity: 1;
+                        }
+
+                        .product-actions {
+                            display: flex;
+                            gap: 12px;
+                            transform: translateY(10px);
+                            transition: transform 0.3s ease;
+                        }
+
+                        .premium-product-card:hover .product-actions {
+                            transform: translateY(0);
+                        }
+
+                        .action-btn {
+                            width: 44px;
+                            height: 44px;
+                            border-radius: 50%;
+                            border: none;
+                            background: var(--white);
+                            color: var(--neutral-700);
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 16px;
+                        }
+
+                        .action-btn:hover {
+                            background: var(--primary);
+                            color: var(--white);
+                            transform: scale(1.1);
+                        }
+
+                        .wishlist-btn:hover {
+                            background: #E11D48;
+                        }
+
+                        .cart-btn:hover {
+                            background: var(--success);
+                        }
+
+                        .product-card-content {
+                            padding: 20px;
+                        }
+
+                        .product-category {
+                            font-size: 12px;
+                            color: var(--neutral-500);
+                            font-weight: 500;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            margin-bottom: 8px;
+                        }
+
+                        .product-name {
+                            font-size: 1rem;
+                            font-weight: 600;
+                            color: var(--neutral-900);
+                            margin-bottom: 12px;
+                            line-height: 1.4;
+                            height: 44px;
+                            overflow: hidden;
+                            display: -webkit-box;
+                            -webkit-line-clamp: 2;
+                            -webkit-box-orient: vertical;
+                        }
+
+                        .product-name a {
+                            color: inherit;
+                            text-decoration: none;
+                            transition: color 0.3s ease;
+                        }
+
+                        .product-name a:hover {
+                            color: var(--primary);
+                        }
+
+                        .product-price {
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                            margin-bottom: 16px;
+                        }
+
+                        .current-price {
+                            font-size: 1.125rem;
+                            font-weight: 700;
+                            color: var(--primary);
+                            font-family: 'JetBrains Mono', monospace;
+                        }
+
+                        /* Loading Styles */
+                        .loading-container {
+                            padding: 80px 0;
+                            text-align: center;
+                        }
+
+                        .loading-spinner {
+                            display: inline-flex;
+                            flex-direction: column;
+                            align-items: center;
+                            gap: 16px;
+                        }
+
+                        .spinner {
+                            width: 40px;
+                            height: 40px;
+                            border: 3px solid var(--neutral-200);
+                            border-top: 3px solid var(--primary);
+                            border-radius: 50%;
+                            animation: spin 1s linear infinite;
+                        }
+
+                        @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+
+                        .loading-text {
+                            color: var(--neutral-500);
+                            font-size: 14px;
+                            margin: 0;
+                        }
+
+                        /* Responsive */
+                        @media (max-width: 1199.98px) {
+                            .profile-title {
+                                font-size: 2rem;
+                            }
+
+                            .title-icon {
+                                width: 48px;
+                                height: 48px;
+                                font-size: 20px;
+                            }
+                        }
+
+                        @media (max-width: 991.98px) {
+                            .profile-content-section {
+                                padding: 40px 0;
+                            }
+
+                            .profile-card-header,
+                            .profile-card-body {
+                                padding: 20px 24px;
+                            }
+
+                            .user-avatar-section {
+                                padding: 24px;
+                            }
+
+                            .products-grid {
+                                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+                                gap: 20px;
+                            }
+                        }
+
+                        @media (max-width: 767.98px) {
+                            .profile-title {
+                                font-size: 1.75rem;
+                                flex-direction: column;
+                                text-align: center;
+                                gap: 12px;
+                            }
+
+                            .profile-title-section .d-flex {
+                                flex-direction: column;
+                                text-align: center;
+                                gap: 24px;
+                            }
+
+                            .profile-header {
+                                padding: 32px 0 40px;
+                            }
+
+                            .profile-content-section {
+                                padding: 32px 0;
+                            }
+
+                            .profile-card-header,
+                            .profile-card-body {
+                                padding: 16px 20px;
+                            }
+
+                            .user-avatar-section {
+                                padding: 20px;
+                            }
+
+                            .form-actions {
+                                justify-content: stretch;
+                            }
+
+                            .premium-btn {
+                                flex: 1;
+                                justify-content: center;
+                            }
+
+                            .products-grid {
+                                grid-template-columns: 1fr;
+                                gap: 16px;
+                            }
+
+                            .section-title {
+                                font-size: 1.5rem;
+                                flex-direction: column;
+                                gap: 12px;
+                            }
+
+                            .section-title .title-icon {
+                                width: 40px;
+                                height: 40px;
+                                font-size: 16px;
+                            }
+                        }
+                    </style>
+                `;
+
+                document.getElementById('pageContent').innerHTML = contentHtml;
+                console.log('Content HTML injected into pageContent');
+
+                // Initialize profile functionality
+                console.log('Calling initializeProfile...');
+                initializeProfile();
+                console.log('initializeProfile completed');
+
+                // Load recommended products
+                loadRecommendedProducts();
+
+            } catch (error) {
+                console.error('Error loading profile content:', error);
+                document.getElementById('pageContent').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải thông tin cá nhân</div>';
+            }
+        }
+
+        // Initialize profile functionality
+        function initializeProfile() {
+            console.log('=== INITIALIZING PROFILE ===');
+
+            // Check if form exists
+            const profileForm = document.getElementById('profileForm');
+            console.log('Profile form element:', profileForm);
+
+            if (!profileForm) {
+                showAlert('danger', 'FRONTEND ERROR: Không tìm thấy form profile');
+                return;
+            }
+
+            // Profile form handler
+            profileForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                console.log('=== FRONTEND: Profile form submitted ===');
+
+                const formData = {
+                    fullName: document.getElementById('fullName').value.trim(),
+                    email: document.getElementById('email').value.trim(),
+                    phone: document.getElementById('phone').value.trim(),
+                    address: document.getElementById('address').value.trim()
+                };
+
+                console.log('Form data:', formData);
+                console.log('Sending POST request to /user/profile/update');
+
+                try {
+                    console.log('Making fetch request...');
+                    const response = await fetch('/user/profile/update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    });
+
+                    console.log('Response received:', response);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    console.log('Response data:', data);
+
+                    if (data.success) {
+                        showAlert('success', data.message);
+                    } else {
+                        showAlert('danger', data.message);
+                    }
+                } catch (error) {
+                    console.log('=== FRONTEND: Error occurred ===');
+                    console.log('Error object:', error);
+                    console.log('Error response:', error.response);
+                    console.log('Error response data:', error.response?.data);
+
+                    const message = error.response?.data?.message || 'Có lỗi xảy ra khi cập nhật thông tin';
+                    showAlert('danger', message);
+                }
+            });
+
+            // Password form handler
+            document.getElementById('passwordForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const currentPassword = document.getElementById('currentPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+
+                // Validate password confirmation
+                if (newPassword !== confirmPassword) {
+                    document.getElementById('confirmPassword').classList.add('is-invalid');
+                    document.querySelector('#confirmPassword + .invalid-feedback').textContent = 'Xác nhận mật khẩu không khớp';
+                    return;
+                } else {
+                    document.getElementById('confirmPassword').classList.remove('is-invalid');
+                }
+
+                const passwordData = {
+                    currentPassword: currentPassword,
+                    newPassword: newPassword,
+                    confirmPassword: confirmPassword
+                };
+
+                try {
+                    const response = await axios.put('/user/profile/change-password', passwordData);
+
+                    if (response.data.success) {
+                        showAlert('success', response.data.message);
+                        // Clear password form
+                        document.getElementById('passwordForm').reset();
+                    } else {
+                        showAlert('danger', response.data.message);
+                    }
+                } catch (error) {
+                    const message = error.response?.data?.message || 'Có lỗi xảy ra khi đổi mật khẩu';
+                    showAlert('danger', message);
+                }
+            });
+
+            // Email validation on blur
+            document.getElementById('email').addEventListener('blur', async function() {
+                const email = this.value.trim();
+                const originalEmail = document.getElementById('username').getAttribute('data-original-email');
+
+                if (email && email !== originalEmail) {
+                    try {
+                        const response = await axios.get(`/user/profile/check-email?email=${encodeURIComponent(email)}`);
+                        if (!response.data.data) {
+                            this.classList.add('is-invalid');
+                            this.nextElementSibling.textContent = 'Email đã được sử dụng bởi người dùng khác';
+                        } else {
+                            this.classList.remove('is-invalid');
+                        }
+                    } catch (error) {
+                        console.error('Error checking email:', error);
+                    }
+                }
+            });
+        }
+
+        // Show alert function
+        function showAlert(type, message) {
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            document.getElementById('alertContainer').innerHTML = alertHtml;
+
+            // Auto dismiss after 5 seconds
+            setTimeout(() => {
+                const alert = document.querySelector('#alertContainer .alert');
+                if (alert) {
+                    alert.remove();
+                }
+            }, 5000);
+        }
+
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            console.error('=== GLOBAL ERROR ===', e.error);
+            console.error('Error message:', e.message);
+            console.error('Error filename:', e.filename);
+            console.error('Error line:', e.lineno);
+
+            // Show error on UI
+            if (document.getElementById('alertContainer')) {
+                showAlert('danger', 'JAVASCRIPT ERROR: ' + e.message + ' at line ' + e.lineno);
+            }
+        });
+
+        // Catch unhandled promise rejections
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('=== UNHANDLED PROMISE REJECTION ===', e.reason);
+
+            // Show error on UI
+            if (document.getElementById('alertContainer')) {
+                showAlert('danger', 'PROMISE ERROR: ' + e.reason);
+            }
+        });
+
+        // Load recommended products
+        async function loadRecommendedProducts() {
+            try {
+                console.log('Loading recommended products...');
+
+                // Show recommended section
+                document.getElementById('recommendedSection').style.display = 'block';
+
+                const response = await fetch('/api/products/random?limit=8');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data && data.data.length > 0) {
+                        displayRecommendedProducts(data.data);
+                    } else {
+                        hideRecommendedSection();
+                    }
+                } else {
+                    console.error('Failed to load recommended products');
+                    hideRecommendedSection();
+                }
+            } catch (error) {
+                console.error('Error loading recommended products:', error);
+                hideRecommendedSection();
+            }
+        }
+
+        // Display recommended products with premium design
+        function displayRecommendedProducts(products) {
+            const container = document.getElementById('recommendedProductsContainer');
+
+            // Hide loading spinner and show container
+            document.getElementById('recommendedLoadingSpinner').style.display = 'none';
+            container.style.display = 'block';
+
+            let html = '';
+            products.forEach(product => {
+                html += createPremiumProductCard(product);
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Create premium product card HTML (similar to other pages)
+        function createPremiumProductCard(product) {
+            const productUrl = `/user/products/${product.id}`;
+            const imageUrl = product.imageUrl || '/images/placeholder.jpg';
+
+            return `
+                <div class="premium-product-card" data-product-id="${product.id}">
+                    <div class="product-card-image">
+                        <a href="${productUrl}">
+                            <img src="${imageUrl}" alt="${escapeHtml(product.name)}" loading="lazy">
+                        </a>
+                        <div class="product-card-overlay">
+                            <div class="product-actions">
+                                <button class="action-btn wishlist-btn" onclick="toggleWishlist('${product.id}')" title="Thêm vào yêu thích">
+                                    <i class="far fa-heart"></i>
+                                </button>
+                                <button class="action-btn quick-view-btn" onclick="quickView('${product.id}')" title="Xem nhanh">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="action-btn cart-btn" onclick="addToCart('${product.id}')" title="Thêm vào giỏ">
+                                    <i class="fas fa-shopping-cart"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="product-card-content">
+                        <div class="product-category">${escapeHtml(product.category?.name || 'Danh mục')}</div>
+                        <h3 class="product-name">
+                            <a href="${productUrl}">${escapeHtml(product.name)}</a>
+                        </h3>
+                        <div class="product-price">
+                            <span class="current-price">${formatCurrency(product.price)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Hide recommended section
+        function hideRecommendedSection() {
+            document.getElementById('recommendedSection').style.display = 'none';
+        }
+
+        // Wishlist toggle function
+        async function toggleWishlist(productId) {
+            try {
+                const response = await fetch('/api/user/wishlist/toggle', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ productId: productId })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const btn = document.querySelector(`[data-product-id="${productId}"] .wishlist-btn i`);
+                    if (data.data) {
+                        btn.className = 'fas fa-heart';
+                        btn.style.color = '#E11D48';
+                    } else {
+                        btn.className = 'far fa-heart';
+                        btn.style.color = '';
+                    }
+                    showAlert('success', data.message);
+                } else {
+                    showAlert('danger', data.message);
+                }
+            } catch (error) {
+                console.error('Error toggling wishlist:', error);
+                showAlert('danger', 'Có lỗi xảy ra khi thêm vào danh sách yêu thích');
+            }
+        }
+
+        // Add to cart function
+        async function addToCart(productId) {
+            try {
+                const response = await fetch('/api/user/cart/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        productId: productId,
+                        quantity: 1
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('success', 'Đã thêm sản phẩm vào giỏ hàng');
+                    updateCartCounter();
+                } else {
+                    showAlert('danger', data.message);
+                }
+            } catch (error) {
+                console.error('Error adding to cart:', error);
+                showAlert('danger', 'Có lỗi xảy ra khi thêm vào giỏ hàng');
+            }
+        }
+
+        // Quick view function
+        function quickView(productId) {
+            window.location.href = `/user/products/${productId}`;
+        }
+
+        // Update cart counter
+        function updateCartCounter() {
+            // This would typically fetch the current cart count
+            // For now, we'll just trigger a visual update if the counter exists
+            const cartCounter = document.querySelector('.cart-counter');
+            if (cartCounter) {
+                // Add a small animation to show the counter has been updated
+                cartCounter.style.transform = 'scale(1.2)';
+                setTimeout(() => {
+                    cartCounter.style.transform = 'scale(1)';
+                }, 200);
+            }
+        }
+
+        // Escape HTML function
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        // Format currency function
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        // Load layout and content when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== DOM CONTENT LOADED ===');
+            try {
+                loadLayoutWithScripts('/user/layouts/app.html', loadPageContent, 'profile');
+            } catch (error) {
+                console.error('Error in DOMContentLoaded:', error);
+                showAlert('danger', 'ERROR LOADING PAGE: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chỉnh sửa Sản phẩm - Admin Panel</title>
+    <!-- Load axios first -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Get product ID from URL
+        // URL format: /admin/products/{id}/edit
+        const pathParts = window.location.pathname.split('/');
+        const productId = pathParts[pathParts.length - 2]; // Get the ID before 'edit'
+
+        // Utility function to properly load admin layout with script execution
+        async function loadAdminLayoutWithScripts(contentLoader, activeNavPage) {
+            try {
+                console.log('Loading admin layout for page:', activeNavPage);
+
+                // Fetch the admin layout
+                const response = await fetch('/admin/layouts/app.html');
+                const layoutHtml = await response.text();
+
+                // Create a temporary container to parse the HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+
+                // Extract and execute scripts manually
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout into container
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually to ensure they run
+                scripts.forEach(script => {
+                    if (script.src) {
+                        // External script - check if already loaded
+                        if (!document.querySelector(`script[src="${script.src}"]`)) {
+                            const newScript = document.createElement('script');
+                            newScript.src = script.src;
+                            newScript.onload = () => console.log('External script loaded:', script.src);
+                            document.head.appendChild(newScript);
+                        }
+                    } else {
+                        // Inline script
+                        const newScript = document.createElement('script');
+                        newScript.textContent = script.textContent;
+                        document.head.appendChild(newScript);
+                    }
+                });
+
+                // Wait for layout and scripts to be fully loaded
+                setTimeout(() => {
+                    // Force AdminLayout initialization if it exists
+                    if (window.AdminLayout) {
+                        console.log('Force initializing AdminLayout...');
+                        window.AdminLayout.forceInit();
+
+                        setTimeout(() => {
+                            if (activeNavPage) {
+                                window.AdminLayout.setActiveNav(activeNavPage);
+                            }
+                        }, 200);
+                    }
+
+                    // Load page-specific content
+                    if (contentLoader) {
+                        contentLoader();
+                    }
+                }, 500);
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load admin layout and inject edit product content
+        async function loadEditProductPage() {
+            await loadAdminLayoutWithScripts(loadEditProductContent, 'products');
+        }
+
+        // Load edit product specific content
+        function loadEditProductContent() {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                pageContent.innerHTML = `
+                    <!-- Page Header -->
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">
+                            <i class="fas fa-edit me-2"></i>Chỉnh sửa Sản phẩm
+                        </h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <a href="/admin/products" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Quay lại
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Alert Messages -->
+                    <div id="alertContainer"></div>
+
+                    <!-- Loading State -->
+                    <div id="loadingState" class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Đang tải...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Đang tải thông tin sản phẩm...</p>
+                    </div>
+
+                    <!-- Edit Form -->
+                    <div id="editFormContainer" style="display: none;" class="row justify-content-center">
+                        <div class="col-lg-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-edit me-2"></i>Thông tin Sản phẩm
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <form id="editProductForm" novalidate>
+                                        <input type="hidden" id="productId" name="id">
+
+                                        <div class="row">
+                                            <div class="col-md-8">
+                                                <div class="mb-3">
+                                                    <label for="name" class="form-label fw-semibold">
+                                                        Tên Sản phẩm <span class="text-danger">*</span>
+                                                    </label>
+                                                    <input type="text"
+                                                           class="form-control"
+                                                           id="name"
+                                                           name="name"
+                                                           placeholder="Nhập tên sản phẩm..."
+                                                           required
+                                                           maxlength="255">
+                                                    <div class="form-text">
+                                                        <i class="fas fa-info-circle me-1"></i>
+                                                        Tối đa 255 ký tự. <span id="nameCounter">0/255</span>
+                                                    </div>
+                                                    <div class="invalid-feedback">
+                                                        Vui lòng nhập tên sản phẩm!
+                                                    </div>
+                                                    <div id="nameAvailabilityFeedback" class="mt-1"></div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label for="description" class="form-label fw-semibold">
+                                                        Mô tả sản phẩm
+                                                    </label>
+                                                    <textarea class="form-control"
+                                                              id="description"
+                                                              name="description"
+                                                              rows="4"
+                                                              placeholder="Nhập mô tả cho sản phẩm..."
+                                                              maxlength="1000"></textarea>
+                                                    <div class="form-text">
+                                                        <i class="fas fa-info-circle me-1"></i>
+                                                        Tối đa 1000 ký tự (tùy chọn). <span id="descCounter">0/1000</span>
+                                                    </div>
+                                                </div>
+
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <div class="mb-3">
+                                                            <label for="price" class="form-label fw-semibold">
+                                                                Giá bán (VNĐ) <span class="text-danger">*</span>
+                                                            </label>
+                                                            <div class="input-group">
+                                                                <input type="number"
+                                                                       class="form-control"
+                                                                       id="price"
+                                                                       name="price"
+                                                                       placeholder="0"
+                                                                       required
+                                                                       min="0"
+                                                                       step="1000">
+                                                                <span class="input-group-text">VNĐ</span>
+                                                            </div>
+                                                            <div class="form-text">
+                                                                <i class="fas fa-info-circle me-1"></i>
+                                                                Giá hiển thị: <span id="priceDisplay">0 VNĐ</span>
+                                                            </div>
+                                                            <div class="invalid-feedback">
+                                                                Vui lòng nhập giá sản phẩm!
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="mb-3">
+                                                            <label for="stock" class="form-label fw-semibold">
+                                                                Số lượng tồn kho <span class="text-danger">*</span>
+                                                            </label>
+                                                            <input type="number"
+                                                                   class="form-control"
+                                                                   id="stock"
+                                                                   name="stock"
+                                                                   placeholder="0"
+                                                                   required
+                                                                   min="0">
+                                                            <div class="form-text">
+                                                                <i class="fas fa-info-circle me-1"></i>
+                                                                Số lượng sản phẩm có sẵn
+                                                            </div>
+                                                            <div class="invalid-feedback">
+                                                                Vui lòng nhập số lượng tồn kho!
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label for="categoryId" class="form-label fw-semibold">
+                                                        Danh mục <span class="text-danger">*</span>
+                                                    </label>
+                                                    <select class="form-select" id="categoryId" name="categoryId" required>
+                                                        <option value="">Chọn danh mục...</option>
+                                                        <!-- Categories will be loaded here -->
+                                                    </select>
+                                                    <div class="invalid-feedback">
+                                                        Vui lòng chọn danh mục!
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-semibold">
+                                                        Ảnh sản phẩm
+                                                    </label>
+                                                    <div class="card">
+                                                        <div class="card-body text-center">
+                                                            <div id="imagePreview" class="mb-3">
+                                                                <div class="bg-light d-flex align-items-center justify-content-center"
+                                                                     style="width: 200px; height: 200px; margin: 0 auto; border-radius: 0.375rem; border: 2px dashed #ddd;">
+                                                                    <div class="text-center">
+                                                                        <i class="fas fa-image fa-3x text-muted mb-2"></i>
+                                                                        <p class="text-muted mb-0">Chưa có ảnh</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <input type="file"
+                                                                   class="form-control"
+                                                                   id="imageFile"
+                                                                   accept="image/*">
+                                                            <input type="hidden" id="imageUrl" name="imageUrl">
+                                                            <div class="form-text">
+                                                                <i class="fas fa-info-circle me-1"></i>
+                                                                JPG, PNG, GIF. Tối đa 5MB
+                                                            </div>
+                                                            <div id="uploadProgress" class="mt-2" style="display: none;">
+                                                                <div class="progress">
+                                                                    <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                                                </div>
+                                                            </div>
+                                                            <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="removeImageBtn" style="display: none;">
+                                                                <i class="fas fa-times me-1"></i>Xóa ảnh
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                            <a href="/admin/products" class="btn btn-secondary me-md-2">
+                                                <i class="fas fa-times me-2"></i>Hủy
+                                            </a>
+                                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                                                <span id="submitSpinner" class="spinner-border spinner-border-sm me-2" style="display: none;"></span>
+                                                <i class="fas fa-save me-2"></i>Cập nhật Sản phẩm
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Help Card -->
+                            <div class="card mt-4">
+                                <div class="card-header">
+                                    <h6 class="card-title mb-0">
+                                        <i class="fas fa-lightbulb me-2"></i>Gợi ý
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="mb-0">
+                                        <li><strong>Tên sản phẩm:</strong> Nên rõ ràng, chi tiết về model, thương hiệu</li>
+                                        <li><strong>Mô tả:</strong> Bao gồm thông số kỹ thuật, tính năng nổi bật</li>
+                                        <li><strong>Giá bán:</strong> Giá cuối cùng khách hàng phải trả</li>
+                                        <li><strong>Ảnh sản phẩm:</strong> Nên sử dụng ảnh chất lượng cao, rõ nét</li>
+                                        <li><strong>Tồn kho:</strong> Số lượng thực tế có sẵn để bán</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Error State -->
+                    <div id="errorState" style="display: none;" class="text-center py-5">
+                        <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                        <h5 class="text-danger">Không thể tải thông tin sản phẩm</h5>
+                        <p class="text-muted mb-3">Sản phẩm không tồn tại hoặc đã xảy ra lỗi</p>
+                        <a href="/admin/products" class="btn btn-primary">
+                            <i class="fas fa-arrow-left me-2"></i>Quay lại danh sách
+                        </a>
+                    </div>
+                `;
+
+                // Initialize edit product features
+                initEditProductFeatures();
+            }
+        }
+
+        // Product and categories data storage
+        let originalProductData = null;
+        let categoriesData = [];
+
+        // Initialize edit product specific features
+        function initEditProductFeatures() {
+            // Load categories first
+            loadCategories();
+
+            // Load product data
+            loadProductData();
+        }
+
+        // Load categories
+        async function loadCategories() {
+            try {
+                const response = await axios.get('/api/admin/categories');
+                if (response.data.success) {
+                    categoriesData = response.data.data;
+                    renderCategoryOptions();
+                }
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        }
+
+        // Render category options
+        function renderCategoryOptions() {
+            const categorySelect = document.getElementById('categoryId');
+            if (categorySelect && categoriesData.length > 0) {
+                const options = categoriesData.map(category =>
+                    `<option value="${category.id}">${escapeHtml(category.name)}</option>`
+                ).join('');
+
+                categorySelect.innerHTML = `
+                    <option value="">Chọn danh mục...</option>
+                    ${options}
+                `;
+
+                // Select current category if product data is loaded
+                if (originalProductData && originalProductData.categoryId) {
+                    categorySelect.value = originalProductData.categoryId;
+                }
+            }
+        }
+
+        // Load product data from API
+        async function loadProductData() {
+            try {
+                const response = await axios.get(`/api/admin/products/${productId}`);
+
+                if (response.data.success) {
+                    originalProductData = response.data.data;
+                    populateForm(originalProductData);
+                    showEditForm();
+
+                    // Initialize form features after data is loaded
+                    setupFormValidation();
+                    setupCharacterCounters();
+                    setupPriceFormatter();
+                    setupImageUpload();
+                    setupNameAvailabilityCheck();
+
+                } else {
+                    showError('Sản phẩm không tồn tại');
+                }
+            } catch (error) {
+                console.error('Error loading product:', error);
+                if (error.response && error.response.status === 404) {
+                    showError('Sản phẩm không tồn tại');
+                } else {
+                    showError('Không thể tải thông tin sản phẩm. Vui lòng thử lại!');
+                }
+            }
+        }
+
+        // Populate form with product data
+        function populateForm(product) {
+            document.getElementById('productId').value = product.id;
+            document.getElementById('name').value = product.name || '';
+            document.getElementById('description').value = product.description || '';
+            document.getElementById('price').value = product.price || '';
+            document.getElementById('stock').value = product.stock || 0;
+            document.getElementById('imageUrl').value = product.imageUrl || '';
+
+            // Set category if available
+            if (product.categoryId && categoriesData.length > 0) {
+                const categorySelect = document.getElementById('categoryId');
+                categorySelect.value = product.categoryId;
+            }
+
+            // Update character counters
+            updateCharacterCounter('name', product.name || '', 255);
+            updateCharacterCounter('description', product.description || '', 1000);
+
+            // Update price display
+            const priceDisplay = document.getElementById('priceDisplay');
+            if (priceDisplay) {
+                priceDisplay.textContent = formatPrice(product.price || 0);
+            }
+
+            // Update image preview
+            updateImagePreview(product.imageUrl);
+        }
+
+        // Update image preview
+        function updateImagePreview(imageUrl) {
+            const imagePreview = document.getElementById('imagePreview');
+            const removeImageBtn = document.getElementById('removeImageBtn');
+
+            if (imageUrl) {
+                imagePreview.innerHTML = `
+                    <img src="${imageUrl}" alt="Product Image"
+                         class="img-thumbnail" style="width: 200px; height: 200px; object-fit: cover;">
+                `;
+                removeImageBtn.style.display = 'inline-block';
+            } else {
+                imagePreview.innerHTML = `
+                    <div class="bg-light d-flex align-items-center justify-content-center"
+                         style="width: 200px; height: 200px; margin: 0 auto; border-radius: 0.375rem; border: 2px dashed #ddd;">
+                        <div class="text-center">
+                            <i class="fas fa-image fa-3x text-muted mb-2"></i>
+                            <p class="text-muted mb-0">Chưa có ảnh</p>
+                        </div>
+                    </div>
+                `;
+                removeImageBtn.style.display = 'none';
+            }
+        }
+
+        // Update character counter
+        function updateCharacterCounter(fieldName, value, maxLength) {
+            const counter = document.getElementById(fieldName + 'Counter');
+            if (counter) {
+                const length = value.length;
+                counter.textContent = `${length}/${maxLength}`;
+
+                if (length > maxLength * 0.8) {
+                    counter.classList.add('text-warning');
+                } else {
+                    counter.classList.remove('text-warning');
+                }
+            }
+        }
+
+        // Show edit form
+        function showEditForm() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('editFormContainer').style.display = 'block';
+            document.getElementById('errorState').style.display = 'none';
+
+            // Focus on name input
+            setTimeout(() => {
+                const nameInput = document.getElementById('name');
+                if (nameInput) {
+                    nameInput.focus();
+                    nameInput.select();
+                }
+            }, 100);
+        }
+
+        // Show error state
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('editFormContainer').style.display = 'none';
+            document.getElementById('errorState').style.display = 'block';
+
+            if (message) {
+                showAlert('danger', message);
+            }
+        }
+
+        // Setup form validation
+        function setupFormValidation() {
+            const form = document.getElementById('editProductForm');
+
+            form.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (form.checkValidity()) {
+                    await submitForm();
+                }
+
+                form.classList.add('was-validated');
+            });
+        }
+
+        // Setup character counters
+        function setupCharacterCounters() {
+            const nameInput = document.getElementById('name');
+            const descInput = document.getElementById('description');
+
+            // Name counter
+            nameInput.addEventListener('input', function() {
+                updateCharacterCounter('name', this.value, 255);
+            });
+
+            // Description counter
+            descInput.addEventListener('input', function() {
+                updateCharacterCounter('description', this.value, 1000);
+            });
+        }
+
+        // Setup price formatter
+        function setupPriceFormatter() {
+            const priceInput = document.getElementById('price');
+            const priceDisplay = document.getElementById('priceDisplay');
+
+            priceInput.addEventListener('input', function() {
+                const price = parseFloat(this.value) || 0;
+                priceDisplay.textContent = formatPrice(price);
+            });
+        }
+
+        // Format price
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(price);
+        }
+
+        // Setup image upload
+        function setupImageUpload() {
+            const imageFile = document.getElementById('imageFile');
+            const removeImageBtn = document.getElementById('removeImageBtn');
+
+            imageFile.addEventListener('change', async function(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                // Validate file
+                if (!file.type.startsWith('image/')) {
+                    showAlert('danger', 'Vui lòng chọn file ảnh (JPG, PNG, GIF)');
+                    return;
+                }
+
+                if (file.size > 5 * 1024 * 1024) {
+                    showAlert('danger', 'Kích thước file không được vượt quá 5MB');
+                    return;
+                }
+
+                // Show preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    updateImagePreview(e.target.result);
+                };
+                reader.readAsDataURL(file);
+
+                // Upload file
+                await uploadImage(file);
+            });
+
+            // Remove image button
+            removeImageBtn.addEventListener('click', function() {
+                document.getElementById('imageUrl').value = '';
+                updateImagePreview(null);
+                imageFile.value = '';
+            });
+        }
+
+        // Upload image
+        async function uploadImage(file) {
+            const uploadProgress = document.getElementById('uploadProgress');
+            const progressBar = uploadProgress.querySelector('.progress-bar');
+            const imageUrl = document.getElementById('imageUrl');
+
+            try {
+                uploadProgress.style.display = 'block';
+                progressBar.style.width = '0%';
+
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const response = await axios.post('/api/admin/products/upload-image', formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    },
+                    onUploadProgress: function(progressEvent) {
+                        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        progressBar.style.width = percentCompleted + '%';
+                    }
+                });
+
+                if (response.data.success) {
+                    imageUrl.value = response.data.data;
+                    updateImagePreview(response.data.data);
+                    showAlert('success', 'Upload ảnh thành công!');
+                } else {
+                    showAlert('danger', 'Lỗi upload ảnh: ' + response.data.message);
+                }
+
+            } catch (error) {
+                console.error('Error uploading image:', error);
+                showAlert('danger', 'Không thể upload ảnh. Vui lòng thử lại!');
+            } finally {
+                setTimeout(() => {
+                    uploadProgress.style.display = 'none';
+                }, 1000);
+            }
+        }
+
+        // Setup name availability check
+        function setupNameAvailabilityCheck() {
+            const nameInput = document.getElementById('name');
+            const feedbackDiv = document.getElementById('nameAvailabilityFeedback');
+            let checkTimeout;
+
+            nameInput.addEventListener('input', function() {
+                const name = this.value.trim();
+
+                // Clear previous timeout
+                clearTimeout(checkTimeout);
+
+                // Clear feedback
+                feedbackDiv.innerHTML = '';
+
+                // Skip check if name hasn't changed
+                if (originalProductData && name === originalProductData.name) {
+                    nameInput.setCustomValidity('');
+                    return;
+                }
+
+                if (name.length >= 2) {
+                    // Debounced check
+                    checkTimeout = setTimeout(async () => {
+                        await checkNameAvailability(name);
+                    }, 500);
+                }
+            });
+
+            async function checkNameAvailability(name) {
+                try {
+                    feedbackDiv.innerHTML = `
+                        <small class="text-muted">
+                            <i class="fas fa-spinner fa-spin me-1"></i>Đang kiểm tra...
+                        </small>
+                    `;
+
+                    const response = await axios.get(`/api/admin/products/exists/name/${encodeURIComponent(name)}`);
+
+                    if (response.data.success) {
+                        const exists = response.data.data;
+
+                        if (exists) {
+                            feedbackDiv.innerHTML = `
+                                <small class="text-danger">
+                                    <i class="fas fa-times-circle me-1"></i>Tên sản phẩm đã tồn tại
+                                </small>
+                            `;
+                            nameInput.setCustomValidity('Tên sản phẩm đã tồn tại');
+                        } else {
+                            feedbackDiv.innerHTML = `
+                                <small class="text-success">
+                                    <i class="fas fa-check-circle me-1"></i>Tên sản phẩm khả dụng
+                                </small>
+                            `;
+                            nameInput.setCustomValidity('');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error checking name availability:', error);
+                    feedbackDiv.innerHTML = `
+                        <small class="text-warning">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Không thể kiểm tra tên sản phẩm
+                        </small>
+                    `;
+                }
+            }
+        }
+
+        // Submit form
+        async function submitForm() {
+            const form = document.getElementById('editProductForm');
+            const submitBtn = document.getElementById('submitBtn');
+            const submitSpinner = document.getElementById('submitSpinner');
+
+            try {
+                // Show loading state
+                submitBtn.disabled = true;
+                submitSpinner.style.display = 'inline-block';
+                submitBtn.innerHTML = `
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    Đang cập nhật...
+                `;
+
+                // Prepare form data
+                const formData = new FormData(form);
+                const productData = {
+                    name: formData.get('name').trim(),
+                    description: formData.get('description').trim() || null,
+                    price: parseFloat(formData.get('price')),
+                    stock: parseInt(formData.get('stock')),
+                    imageUrl: formData.get('imageUrl') || null,
+                    categoryId: parseInt(formData.get('categoryId'))
+                };
+
+                // Submit to API
+                const response = await axios.put(`/api/admin/products/${productId}`, productData);
+
+                if (response.data.success) {
+                    showAlert('success', 'Cập nhật sản phẩm thành công!');
+
+                    // Update original data for comparison
+                    originalProductData = response.data.data;
+
+                    // Redirect to products list after 1.5 seconds
+                    setTimeout(() => {
+                        window.location.href = '/admin/products';
+                    }, 1500);
+                } else {
+                    showAlert('danger', 'Lỗi cập nhật sản phẩm: ' + response.data.message);
+                }
+
+            } catch (error) {
+                console.error('Error updating product:', error);
+
+                if (error.response && error.response.data && error.response.data.message) {
+                    showAlert('danger', error.response.data.message);
+                } else {
+                    showAlert('danger', 'Không thể cập nhật sản phẩm. Vui lòng thử lại!');
+                }
+            } finally {
+                // Reset button state
+                submitBtn.disabled = false;
+                submitSpinner.style.display = 'none';
+                submitBtn.innerHTML = `
+                    <i class="fas fa-save me-2"></i>Cập nhật Sản phẩm
+                `;
+            }
+        }
+
+        // Show alert message
+        function showAlert(type, message) {
+            const alertContainer = document.getElementById('alertContainer');
+            if (alertContainer) {
+                const alertId = 'alert-' + Date.now();
+                alertContainer.innerHTML = `
+                    <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
+                        <i class="fas ${getAlertIcon(type)} me-2"></i>
+                        ${message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
+
+                // Auto hide after 5 seconds for success/info alerts
+                if (type === 'success' || type === 'info') {
+                    setTimeout(() => {
+                        const alert = document.getElementById(alertId);
+                        if (alert) {
+                            const bsAlert = new bootstrap.Alert(alert);
+                            bsAlert.close();
+                        }
+                    }, 5000);
+                }
+
+                // Scroll to top to show alert
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        // Get alert icon based on type
+        function getAlertIcon(type) {
+            switch (type) {
+                case 'success': return 'fa-check-circle';
+                case 'danger': return 'fa-exclamation-triangle';
+                case 'warning': return 'fa-exclamation-triangle';
+                case 'info': return 'fa-info-circle';
+                default: return 'fa-info-circle';
+            }
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        // Load edit product page when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadEditProductPage();
+        });
+    </script>
+</body>
+</html>

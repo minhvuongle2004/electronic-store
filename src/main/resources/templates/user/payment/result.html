@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kết quả thanh toán - Electronic Store</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Load Bootstrap/jQuery trước khi load layout -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Layout loading function với pattern chuẩn
+        async function loadLayoutWithScripts(layoutUrl, contentLoader, activeNavPage) {
+            try {
+                // Fetch layout
+                const response = await fetch(layoutUrl);
+                const layoutHtml = await response.text();
+
+                // Parse và execute scripts manually
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually with proper inline script execution
+                let scriptsLoaded = 0;
+                const totalScripts = scripts.length;
+
+                function executeNextScript(index) {
+                    if (index >= totalScripts) {
+                        // All scripts processed, continue with initialization
+                        setTimeout(() => {
+                            initializeLayoutFeatures();
+                        }, 100);
+                        return;
+                    }
+
+                    const script = scripts[index];
+                    if (script.src && !document.querySelector(`script[src="${script.src}"]`)) {
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        newScript.onload = () => {
+                            console.log('External script loaded:', script.src);
+                            executeNextScript(index + 1);
+                        };
+                        newScript.onerror = () => {
+                            console.error('Failed to load script:', script.src);
+                            executeNextScript(index + 1);
+                        };
+                        document.head.appendChild(newScript);
+                    } else if (!script.src && script.textContent.trim()) {
+                        // Execute inline script properly
+                        try {
+                            // Use Function constructor for better error handling and scope
+                            const scriptFunction = new Function(script.textContent);
+                            scriptFunction();
+                            console.log('Inline script executed successfully');
+                        } catch (error) {
+                            console.error('Error executing inline script:', error);
+                            // Fallback to eval if Function constructor fails
+                            try {
+                                eval(script.textContent);
+                                console.log('Inline script executed via eval fallback');
+                            } catch (evalError) {
+                                console.error('Error in eval fallback:', evalError);
+                            }
+                        }
+                        executeNextScript(index + 1);
+                    } else {
+                        executeNextScript(index + 1);
+                    }
+                }
+
+                // Start executing scripts
+                executeNextScript(0);
+
+                function initializeLayoutFeatures() {
+                    // Initialize Bootstrap components
+                    document.querySelectorAll('.dropdown-toggle').forEach(el => {
+                        if (typeof bootstrap !== 'undefined') {
+                            new bootstrap.Dropdown(el);
+                        }
+                    });
+
+                    // Set active nav if needed
+                    if (activeNavPage && window.AdminLayout) {
+                        window.AdminLayout.setActiveNav(activeNavPage);
+                    }
+
+                    // Load content
+                    if (contentLoader) contentLoader();
+                }
+
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load payment result content sau khi layout đã sẵn sàng
+        function loadPaymentResultContent() {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                // Get URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const resultCode = urlParams.get('resultCode');
+                const orderId = urlParams.get('orderId');
+                const message = urlParams.get('message');
+
+                let resultIcon, resultColor, resultTitle, resultMessage;
+
+                if (resultCode === '0') {
+                    // Payment thành công
+                    resultIcon = 'fas fa-check-circle';
+                    resultColor = 'success';
+                    resultTitle = 'Thanh toán thành công!';
+                    resultMessage = 'Đơn hàng của bạn đã được thanh toán thành công và đang được xử lý.';
+                } else {
+                    // Payment thất bại
+                    resultIcon = 'fas fa-times-circle';
+                    resultColor = 'danger';
+                    resultTitle = 'Thanh toán thất bại!';
+                    resultMessage = message || 'Đã có lỗi xảy ra trong quá trình thanh toán. Vui lòng thử lại sau.';
+                }
+
+                pageContent.innerHTML = `
+                    <!-- Breadcrumb -->
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="/user/home">Trang chủ</a></li>
+                            <li class="breadcrumb-item"><a href="/user/cart">Giỏ hàng</a></li>
+                            <li class="breadcrumb-item"><a href="/user/checkout">Thanh toán</a></li>
+                            <li class="breadcrumb-item active" aria-current="page">Kết quả</li>
+                        </ol>
+                    </nav>
+
+                    <!-- Payment Result -->
+                    <div class="row justify-content-center">
+                        <div class="col-lg-8">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body text-center py-5">
+                                    <i class="${resultIcon} fa-5x text-${resultColor} mb-4"></i>
+                                    <h2 class="text-${resultColor} mb-3">${resultTitle}</h2>
+                                    <p class="lead text-muted mb-4">${resultMessage}</p>
+
+                                    ${orderId ? `
+                                        <div class="alert alert-info">
+                                            <strong>Mã đơn hàng:</strong> ${orderId}
+                                        </div>
+                                    ` : ''}
+
+                                    <div class="d-flex justify-content-center gap-3 flex-wrap">
+                                        <a href="/user/home" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-home me-2"></i>Về trang chủ
+                                        </a>
+                                        <a href="/user/products" class="btn btn-outline-primary btn-lg">
+                                            <i class="fas fa-shopping-bag me-2"></i>Tiếp tục mua sắm
+                                        </a>
+                                        ${resultCode === '0' ? `
+                                            <a href="/user/orders" class="btn btn-outline-secondary btn-lg">
+                                                <i class="fas fa-list me-2"></i>Xem đơn hàng
+                                            </a>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+
+                            ${resultCode === '0' ? `
+                                <!-- Order Summary -->
+                                <div class="card mt-4">
+                                    <div class="card-header">
+                                        <h5 class="mb-0"><i class="fas fa-receipt me-2"></i>Thông tin đơn hàng</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p><strong>Mã đơn hàng:</strong> ${orderId}</p>
+                                                <p><strong>Phương thức thanh toán:</strong> MoMo</p>
+                                                <p><strong>Trạng thái:</strong> <span class="badge bg-success">Đã thanh toán</span></p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p><strong>Thời gian:</strong> ${new Date().toLocaleString('vi-VN')}</p>
+                                                <p><strong>Email xác nhận:</strong> Sẽ được gửi trong vài phút</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+
+                            <!-- Next Steps -->
+                            <div class="card mt-4">
+                                <div class="card-header">
+                                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Thông tin hỗ trợ</h5>
+                                </div>
+                                <div class="card-body">
+                                    ${resultCode === '0' ? `
+                                        <ul class="list-unstyled">
+                                            <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Đơn hàng sẽ được xử lý trong vòng 24 giờ</li>
+                                            <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Email xác nhận sẽ được gửi đến địa chỉ email của bạn</li>
+                                            <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Bạn có thể theo dõi trạng thái đơn hàng tại mục "Đơn hàng của tôi"</li>
+                                        </ul>
+                                    ` : `
+                                        <ul class="list-unstyled">
+                                            <li class="mb-2"><i class="fas fa-phone text-primary me-2"></i>Hotline hỗ trợ: <strong>1900-xxxx</strong></li>
+                                            <li class="mb-2"><i class="fas fa-envelope text-primary me-2"></i>Email: support@electronicstore.com</li>
+                                            <li class="mb-2"><i class="fas fa-clock text-primary me-2"></i>Thời gian hỗ trợ: 8:00 - 22:00 hằng ngày</li>
+                                        </ul>
+                                    `}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                localStorage.removeItem('cart');
+                window.location.href = '/auth/login';
+            } catch (error) {
+                console.error('Error logging out:', error);
+                window.location.href = '/auth/login';
+            }
+        }
+
+        // Initialize layout khi DOM ready
+        document.addEventListener('DOMContentLoaded', function() {
+            loadLayoutWithScripts('/user/layouts/app.html', loadPaymentResultContent, 'result');
+        });
+    </script>
+
+</body>
+</html>

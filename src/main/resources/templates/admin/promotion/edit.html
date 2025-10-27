@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chỉnh sửa Khuyến mãi - Admin Panel</title>
+
+    <!-- Load Bootstrap/jQuery trước khi load layout -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Global variable to store promotion ID and current data
+        let promotionId = null;
+        let originalData = null;
+
+        // Function để load layout với script execution
+        async function loadLayoutWithScripts(layoutUrl, contentLoader, activeNavPage) {
+            try {
+                // Fetch layout
+                const response = await fetch(layoutUrl);
+                const layoutHtml = await response.text();
+
+                // Parse và execute scripts manually
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually
+                scripts.forEach(script => {
+                    if (script.src && !document.querySelector(`script[src="${script.src}"]`)) {
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        document.head.appendChild(newScript);
+                    } else if (!script.src) {
+                        const newScript = document.createElement('script');
+                        newScript.textContent = script.textContent;
+                        document.head.appendChild(newScript);
+                    }
+                });
+
+                // Initialize UI sau khi load
+                setTimeout(() => {
+                    // Initialize Bootstrap components
+                    document.querySelectorAll('.dropdown-toggle').forEach(el => {
+                        new bootstrap.Dropdown(el);
+                    });
+
+                    // Set active nav nếu cần
+                    if (activeNavPage && window.AdminLayout) {
+                        window.AdminLayout.setActiveNav(activeNavPage);
+                    }
+
+                    // Load content
+                    if (contentLoader) contentLoader();
+                }, 500);
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load edit promotion page content
+        function loadEditPromotionContent() {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                pageContent.innerHTML = `
+                    <!-- Page Header -->
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">
+                            <i class="fas fa-edit me-2"></i>Chỉnh sửa Khuyến mãi
+                        </h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <a href="/admin/promotions" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Quay lại
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div id="loadingContainer" class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Đang tải...</span>
+                        </div>
+                        <p class="mt-3 text-muted">Đang tải thông tin khuyến mãi...</p>
+                    </div>
+
+                    <!-- Error State -->
+                    <div id="errorContainer" class="alert alert-danger" style="display: none;">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <span id="errorMessage">Không thể tải thông tin khuyến mãi</span>
+                    </div>
+
+                    <!-- Edit Form -->
+                    <div id="formContainer" class="row" style="display: none;">
+                        <div class="col-lg-8">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">Thông tin Khuyến mãi</h5>
+                                    <div id="promotionStatus"></div>
+                                </div>
+                                <div class="card-body">
+                                    <form id="editPromotionForm">
+                                        <!-- Basic Information -->
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <label for="name" class="form-label">Tên khuyến mãi <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" id="name" name="name" required>
+                                                <div class="invalid-feedback" id="nameError"></div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="code" class="form-label">Mã khuyến mãi <span class="text-danger">*</span></label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="code" name="code" required
+                                                           style="text-transform: uppercase;" placeholder="VD: SUMMER2025">
+                                                    <button class="btn btn-outline-secondary" type="button" onclick="generateCode()">
+                                                        <i class="fas fa-magic"></i>
+                                                    </button>
+                                                </div>
+                                                <div class="invalid-feedback" id="codeError"></div>
+                                                <small class="form-text text-muted">Mã duy nhất để khách hàng sử dụng</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="description" class="form-label">Mô tả</label>
+                                            <textarea class="form-control" id="description" name="description" rows="3"
+                                                    placeholder="Mô tả chi tiết về khuyến mãi..."></textarea>
+                                        </div>
+
+                                        <!-- Discount Configuration -->
+                                        <div class="row mb-3">
+                                            <div class="col-md-4">
+                                                <label for="discountType" class="form-label">Loại giảm giá <span class="text-danger">*</span></label>
+                                                <select class="form-select" id="discountType" name="discountType" required onchange="toggleDiscountFields()">
+                                                    <option value="">Chọn loại</option>
+                                                    <option value="PERCENT">Phần trăm (%)</option>
+                                                    <option value="FIXED">Số tiền cố định (VND)</option>
+                                                </select>
+                                                <div class="invalid-feedback" id="discountTypeError"></div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="discountValue" class="form-label">Giá trị giảm <span class="text-danger">*</span></label>
+                                                <div class="input-group">
+                                                    <input type="number" class="form-control" id="discountValue" name="discountValue"
+                                                           min="0" step="0.01" required>
+                                                    <span class="input-group-text" id="discountUnit">%</span>
+                                                </div>
+                                                <div class="invalid-feedback" id="discountValueError"></div>
+                                            </div>
+                                            <div class="col-md-4" id="maxDiscountGroup" style="display: none;">
+                                                <label for="maxDiscountAmount" class="form-label">Giảm tối đa (VND)</label>
+                                                <input type="number" class="form-control" id="maxDiscountAmount" name="maxDiscountAmount"
+                                                       min="0" step="1000" placeholder="VD: 100000">
+                                                <small class="form-text text-muted">Để trống nếu không giới hạn</small>
+                                            </div>
+                                        </div>
+
+                                        <!-- Order Requirements -->
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <label for="minOrderAmount" class="form-label">Giá trị đơn hàng tối thiểu (VND)</label>
+                                                <input type="number" class="form-control" id="minOrderAmount" name="minOrderAmount"
+                                                       min="0" step="1000" value="0" placeholder="VD: 500000">
+                                                <small class="form-text text-muted">0 = không yêu cầu tối thiểu</small>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="usageLimit" class="form-label">Giới hạn số lần sử dụng</label>
+                                                <input type="number" class="form-control" id="usageLimit" name="usageLimit"
+                                                       min="1" placeholder="VD: 100">
+                                                <small class="form-text text-muted">Để trống nếu không giới hạn</small>
+                                            </div>
+                                        </div>
+
+                                        <!-- Date Range -->
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <label for="startDate" class="form-label">Ngày bắt đầu <span class="text-danger">*</span></label>
+                                                <input type="date" class="form-control" id="startDate" name="startDate" required>
+                                                <div class="invalid-feedback" id="startDateError"></div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="endDate" class="form-label">Ngày kết thúc <span class="text-danger">*</span></label>
+                                                <input type="date" class="form-control" id="endDate" name="endDate" required>
+                                                <div class="invalid-feedback" id="endDateError"></div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Status -->
+                                        <div class="mb-4">
+                                            <label for="status" class="form-label">Trạng thái</label>
+                                            <select class="form-select" id="status" name="status">
+                                                <option value="ACTIVE">Hoạt động</option>
+                                                <option value="INACTIVE">Không hoạt động</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Submit Buttons -->
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <a href="/admin/promotions" class="btn btn-secondary">Hủy bỏ</a>
+                                            <button type="button" class="btn btn-outline-warning" onclick="resetForm()">
+                                                <i class="fas fa-undo me-2"></i>Khôi phục
+                                            </button>
+                                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                                                <i class="fas fa-save me-2"></i>Cập nhật khuyến mãi
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Preview Panel -->
+                        <div class="col-lg-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Xem trước</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="promotionPreview">
+                                        <!-- Preview will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Usage Statistics -->
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Thống kê sử dụng</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="usageStats">
+                                        <!-- Stats will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Help Tips -->
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Lưu ý</h6>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="list-unstyled mb-0">
+                                        <li class="mb-2">
+                                            <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                                            <small>Thay đổi có thể ảnh hưởng đến đơn hàng hiện tại</small>
+                                        </li>
+                                        <li class="mb-2">
+                                            <i class="fas fa-info-circle text-info me-2"></i>
+                                            <small>Không thể xóa khuyến mãi đã được sử dụng</small>
+                                        </li>
+                                        <li>
+                                            <i class="fas fa-check text-success me-2"></i>
+                                            <small>Có thể vô hiệu hóa tạm thời</small>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Get promotion ID from URL and load data
+                const urlParams = new URLSearchParams(window.location.search);
+                promotionId = urlParams.get('id');
+
+                if (promotionId) {
+                    loadPromotionData(promotionId);
+                } else {
+                    showError('Không tìm thấy ID khuyến mãi');
+                }
+            }
+        }
+
+        // Load promotion data
+        async function loadPromotionData(id) {
+            try {
+                const response = await axios.get(`/api/admin/promotions/${id}`);
+                const promotion = response.data.data;
+
+                originalData = { ...promotion };
+                populateForm(promotion);
+                setupFormValidation();
+                setupPreviewUpdates();
+                updateUsageStats(promotion);
+                updatePreview();
+
+                // Hide loading, show form
+                document.getElementById('loadingContainer').style.display = 'none';
+                document.getElementById('formContainer').style.display = 'block';
+
+                // Handle form submission
+                document.getElementById('editPromotionForm').addEventListener('submit', handleFormSubmit);
+
+            } catch (error) {
+                console.error('Error loading promotion:', error);
+                showError('Không thể tải thông tin khuyến mãi');
+            }
+        }
+
+        // Populate form with promotion data
+        function populateForm(promotion) {
+            document.getElementById('name').value = promotion.name || '';
+            document.getElementById('code').value = promotion.code || '';
+            document.getElementById('description').value = promotion.description || '';
+            document.getElementById('discountType').value = promotion.discountType || '';
+            document.getElementById('discountValue').value = promotion.discountValue || '';
+            document.getElementById('maxDiscountAmount').value = promotion.maxDiscountAmount || '';
+            document.getElementById('minOrderAmount').value = promotion.minOrderAmount || 0;
+            document.getElementById('usageLimit').value = promotion.usageLimit || '';
+            document.getElementById('startDate').value = promotion.startDate || '';
+            document.getElementById('endDate').value = promotion.endDate || '';
+            document.getElementById('status').value = promotion.status || 'ACTIVE';
+
+            // Update status badge
+            const statusBadge = document.getElementById('promotionStatus');
+            statusBadge.innerHTML = `
+                <span class="badge ${promotion.status === 'ACTIVE' ? 'bg-success' : 'bg-secondary'}">
+                    ${promotion.status === 'ACTIVE' ? 'Hoạt động' : 'Không hoạt động'}
+                </span>
+            `;
+
+            // Toggle discount fields based on type
+            toggleDiscountFields();
+        }
+
+        // Update usage statistics
+        function updateUsageStats(promotion) {
+            const statsContainer = document.getElementById('usageStats');
+            const usedCount = promotion.usedCount || 0;
+            const usageLimit = promotion.usageLimit;
+
+            let usagePercentage = 0;
+            let progressColor = 'bg-success';
+
+            if (usageLimit) {
+                usagePercentage = (usedCount / usageLimit) * 100;
+                if (usagePercentage >= 80) progressColor = 'bg-danger';
+                else if (usagePercentage >= 60) progressColor = 'bg-warning';
+            }
+
+            statsContainer.innerHTML = `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small">Số lần đã sử dụng</span>
+                        <span class="small font-weight-bold">${usedCount}${usageLimit ? `/${usageLimit}` : ''}</span>
+                    </div>
+                    ${usageLimit ? `
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar ${progressColor}" style="width: ${usagePercentage}%"></div>
+                        </div>
+                        <small class="text-muted">${usagePercentage.toFixed(1)}% đã sử dụng</small>
+                    ` : `
+                        <small class="text-muted">Không giới hạn</small>
+                    `}
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="text-center">
+                            <div class="h5 mb-0 text-primary">${promotion.id}</div>
+                            <small class="text-muted">ID</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center">
+                            <div class="h5 mb-0 text-info">${formatDate(promotion.createdAt)}</div>
+                            <small class="text-muted">Ngày tạo</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Setup form validation (reuse from create page)
+        function setupFormValidation() {
+            const form = document.getElementById('editPromotionForm');
+            const inputs = form.querySelectorAll('input, select, textarea');
+
+            inputs.forEach(input => {
+                input.addEventListener('blur', () => validateField(input));
+                input.addEventListener('input', () => clearFieldError(input));
+            });
+
+            // Real-time code availability check (excluding current promotion)
+            let codeCheckTimeout;
+            document.getElementById('code').addEventListener('input', function() {
+                clearTimeout(codeCheckTimeout);
+                codeCheckTimeout = setTimeout(() => checkCodeAvailability(this.value), 500);
+            });
+        }
+
+        // Setup preview updates
+        function setupPreviewUpdates() {
+            const form = document.getElementById('editPromotionForm');
+            const inputs = form.querySelectorAll('input, select, textarea');
+
+            inputs.forEach(input => {
+                input.addEventListener('input', updatePreview);
+            });
+        }
+
+        // Toggle discount fields based on type (reuse from create page)
+        function toggleDiscountFields() {
+            const discountType = document.getElementById('discountType').value;
+            const discountUnit = document.getElementById('discountUnit');
+            const maxDiscountGroup = document.getElementById('maxDiscountGroup');
+            const discountValueInput = document.getElementById('discountValue');
+
+            if (discountType === 'PERCENT') {
+                discountUnit.textContent = '%';
+                maxDiscountGroup.style.display = 'block';
+                discountValueInput.max = '100';
+                discountValueInput.placeholder = 'VD: 10';
+            } else if (discountType === 'FIXED') {
+                discountUnit.textContent = 'VND';
+                maxDiscountGroup.style.display = 'none';
+                discountValueInput.max = '';
+                discountValueInput.placeholder = 'VD: 50000';
+            } else {
+                discountUnit.textContent = '';
+                maxDiscountGroup.style.display = 'none';
+                discountValueInput.max = '';
+                discountValueInput.placeholder = '';
+            }
+
+            updatePreview();
+        }
+
+        // Generate random code (reuse from create page)
+        function generateCode() {
+            const prefixes = ['SALE', 'DISC', 'SAVE', 'PROMO', 'DEAL'];
+            const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+            const suffix = Math.floor(Math.random() * 9000) + 1000;
+            const code = prefix + suffix;
+
+            document.getElementById('code').value = code;
+            checkCodeAvailability(code);
+            updatePreview();
+        }
+
+        // Check code availability (excluding current promotion)
+        async function checkCodeAvailability(code) {
+            if (!code || code.length < 3) return;
+
+            try {
+                const response = await axios.get(`/api/admin/promotions/check-code/${code}`);
+                const exists = response.data.data;
+
+                const codeInput = document.getElementById('code');
+                const errorDiv = document.getElementById('codeError');
+
+                // Check if it's the same as original code
+                if (code === originalData.code) {
+                    codeInput.classList.remove('is-invalid');
+                    codeInput.classList.remove('is-valid');
+                    errorDiv.textContent = '';
+                } else if (exists) {
+                    codeInput.classList.add('is-invalid');
+                    errorDiv.textContent = 'Mã khuyến mãi đã tồn tại';
+                } else {
+                    codeInput.classList.remove('is-invalid');
+                    codeInput.classList.add('is-valid');
+                    errorDiv.textContent = '';
+                }
+            } catch (error) {
+                console.error('Error checking code:', error);
+            }
+        }
+
+        // Reset form to original data
+        function resetForm() {
+            if (originalData) {
+                populateForm(originalData);
+                updatePreview();
+                showSuccess('Đã khôi phục dữ liệu ban đầu');
+            }
+        }
+
+        // Update preview (reuse from create page)
+        function updatePreview() {
+            const formData = getFormData();
+            const preview = document.getElementById('promotionPreview');
+
+            if (!formData.name && !formData.code) {
+                preview.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-eye fa-2x mb-2"></i>
+                        <p>Nhập thông tin để xem trước khuyến mãi</p>
+                    </div>
+                `;
+                return;
+            }
+
+            preview.innerHTML = `
+                <div class="promotion-preview">
+                    <div class="text-center mb-3">
+                        <div class="badge bg-primary fs-6 mb-2">${formData.code || 'MÃ KHUYẾN MÃI'}</div>
+                        <h6 class="mb-0">${formData.name || 'Tên khuyến mãi'}</h6>
+                        ${formData.description ? `<small class="text-muted">${formData.description}</small>` : ''}
+                    </div>
+
+                    <div class="discount-info text-center mb-3">
+                        ${generateDiscountDisplay(formData)}
+                    </div>
+
+                    <div class="conditions">
+                        <h6 class="text-muted mb-2">Điều kiện:</h6>
+                        <ul class="list-unstyled mb-0">
+                            ${formData.minOrderAmount > 0 ?
+                                `<li><i class="fas fa-check text-success me-2"></i>Đơn hàng tối thiểu: ${formatCurrency(formData.minOrderAmount)}</li>` :
+                                '<li><i class="fas fa-check text-success me-2"></i>Không yêu cầu đơn tối thiểu</li>'
+                            }
+                            ${formData.usageLimit ?
+                                `<li><i class="fas fa-users text-info me-2"></i>Giới hạn: ${formData.usageLimit} lượt sử dụng</li>` :
+                                '<li><i class="fas fa-infinity text-info me-2"></i>Không giới hạn sử dụng</li>'
+                            }
+                            ${formData.startDate && formData.endDate ?
+                                `<li><i class="fas fa-calendar text-warning me-2"></i>${formatDate(formData.startDate)} - ${formatDate(formData.endDate)}</li>` :
+                                ''
+                            }
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Generate discount display (reuse from create page)
+        function generateDiscountDisplay(formData) {
+            if (!formData.discountType || !formData.discountValue) {
+                return '<div class="text-muted">Chưa cấu hình giảm giá</div>';
+            }
+
+            if (formData.discountType === 'PERCENT') {
+                const maxText = formData.maxDiscountAmount ?
+                    ` (tối đa ${formatCurrency(formData.maxDiscountAmount)})` : '';
+                return `
+                    <div class="display-4 text-danger mb-1">${formData.discountValue}%</div>
+                    <div class="text-muted">Giảm ${formData.discountValue}%${maxText}</div>
+                `;
+            } else {
+                return `
+                    <div class="display-6 text-danger mb-1">${formatCurrency(formData.discountValue)}</div>
+                    <div class="text-muted">Giảm ${formatCurrency(formData.discountValue)}</div>
+                `;
+            }
+        }
+
+        // Get form data (reuse from create page)
+        function getFormData() {
+            return {
+                name: document.getElementById('name').value.trim(),
+                code: document.getElementById('code').value.trim().toUpperCase(),
+                description: document.getElementById('description').value.trim(),
+                discountType: document.getElementById('discountType').value,
+                discountValue: parseFloat(document.getElementById('discountValue').value) || 0,
+                maxDiscountAmount: parseFloat(document.getElementById('maxDiscountAmount').value) || null,
+                minOrderAmount: parseFloat(document.getElementById('minOrderAmount').value) || 0,
+                usageLimit: parseInt(document.getElementById('usageLimit').value) || null,
+                startDate: document.getElementById('startDate').value,
+                endDate: document.getElementById('endDate').value,
+                status: document.getElementById('status').value
+            };
+        }
+
+        // Validate individual field (reuse from create page)
+        function validateField(field) {
+            const value = field.value.trim();
+            let isValid = true;
+            let errorMessage = '';
+
+            switch (field.id) {
+                case 'name':
+                    if (!value) {
+                        isValid = false;
+                        errorMessage = 'Tên khuyến mãi không được để trống';
+                    } else if (value.length < 3) {
+                        isValid = false;
+                        errorMessage = 'Tên khuyến mãi phải có ít nhất 3 ký tự';
+                    }
+                    break;
+
+                case 'code':
+                    if (!value) {
+                        isValid = false;
+                        errorMessage = 'Mã khuyến mãi không được để trống';
+                    } else if (!/^[A-Z0-9]+$/.test(value)) {
+                        isValid = false;
+                        errorMessage = 'Mã chỉ được chứa chữ cái và số, không có dấu cách';
+                    }
+                    break;
+
+                case 'discountValue':
+                    const discountType = document.getElementById('discountType').value;
+                    if (!value || parseFloat(value) <= 0) {
+                        isValid = false;
+                        errorMessage = 'Giá trị giảm phải lớn hơn 0';
+                    } else if (discountType === 'PERCENT' && parseFloat(value) > 100) {
+                        isValid = false;
+                        errorMessage = 'Phần trăm giảm không được vượt quá 100%';
+                    }
+                    break;
+
+                case 'startDate':
+                case 'endDate':
+                    if (!value) {
+                        isValid = false;
+                        errorMessage = 'Ngày không được để trống';
+                    } else {
+                        const startDate = new Date(document.getElementById('startDate').value);
+                        const endDate = new Date(document.getElementById('endDate').value);
+
+                        if (field.id === 'endDate' && startDate >= endDate) {
+                            isValid = false;
+                            errorMessage = 'Ngày kết thúc phải sau ngày bắt đầu';
+                        }
+                    }
+                    break;
+            }
+
+            // Update field validation state
+            const errorDiv = document.getElementById(field.id + 'Error');
+            if (isValid) {
+                field.classList.remove('is-invalid');
+                if (errorDiv) errorDiv.textContent = '';
+            } else {
+                field.classList.add('is-invalid');
+                if (errorDiv) errorDiv.textContent = errorMessage;
+            }
+
+            return isValid;
+        }
+
+        // Clear field error (reuse from create page)
+        function clearFieldError(field) {
+            field.classList.remove('is-invalid');
+            const errorDiv = document.getElementById(field.id + 'Error');
+            if (errorDiv) errorDiv.textContent = '';
+        }
+
+        // Handle form submission
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+
+            // Validate all fields
+            const form = document.getElementById('editPromotionForm');
+            const requiredFields = form.querySelectorAll('[required]');
+            let isFormValid = true;
+
+            requiredFields.forEach(field => {
+                if (!validateField(field)) {
+                    isFormValid = false;
+                }
+            });
+
+            if (!isFormValid) {
+                showError('Vui lòng kiểm tra lại thông tin');
+                return;
+            }
+
+            // Check for code conflicts
+            const codeInput = document.getElementById('code');
+            if (codeInput.classList.contains('is-invalid')) {
+                showError('Mã khuyến mãi đã tồn tại');
+                return;
+            }
+
+            // Submit form
+            const submitBtn = document.getElementById('submitBtn');
+            const originalText = submitBtn.innerHTML;
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Đang cập nhật...';
+
+                const formData = getFormData();
+                const response = await axios.put(`/api/admin/promotions/${promotionId}`, formData);
+
+                showSuccess('Cập nhật khuyến mãi thành công!');
+                originalData = { ...formData }; // Update original data
+                setTimeout(() => {
+                    window.location.href = '/admin/promotions';
+                }, 1500);
+
+            } catch (error) {
+                console.error('Error updating promotion:', error);
+                const message = error.response?.data?.message || 'Không thể cập nhật khuyến mãi';
+                showError(message);
+
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
+        }
+
+        // Show error
+        function showError(message) {
+            document.getElementById('loadingContainer').style.display = 'none';
+            document.getElementById('formContainer').style.display = 'none';
+            document.getElementById('errorContainer').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+        }
+
+        // Utility functions (reuse from create page)
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('vi-VN');
+        }
+
+        function showSuccess(message) {
+            alert('✓ ' + message);
+        }
+
+        function showError(message) {
+            alert('✗ ' + message);
+        }
+
+        // Load page when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            loadLayoutWithScripts('/admin/layouts/app.html', loadEditPromotionContent, 'promotions');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chỉnh sửa Danh mục - Admin Panel</title>
+    <!-- Load axios first -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Get category ID from URL
+        // URL format: /admin/categories/{id}/edit
+        const pathParts = window.location.pathname.split('/');
+        const categoryId = pathParts[pathParts.length - 2]; // Get the ID before 'edit'
+
+        // Utility function to properly load admin layout with script execution
+        async function loadAdminLayoutWithScripts(contentLoader, activeNavPage) {
+            try {
+                console.log('Loading admin layout for page:', activeNavPage);
+
+                // Fetch the admin layout
+                const response = await fetch('/admin/layouts/app.html');
+                const layoutHtml = await response.text();
+
+                // Create a temporary container to parse the HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+
+                // Extract and execute scripts manually
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout into container
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually to ensure they run
+                scripts.forEach(script => {
+                    if (script.src) {
+                        // External script - check if already loaded
+                        if (!document.querySelector(`script[src="${script.src}"]`)) {
+                            const newScript = document.createElement('script');
+                            newScript.src = script.src;
+                            newScript.onload = () => console.log('External script loaded:', script.src);
+                            document.head.appendChild(newScript);
+                        }
+                    } else {
+                        // Inline script
+                        const newScript = document.createElement('script');
+                        newScript.textContent = script.textContent;
+                        document.head.appendChild(newScript);
+                    }
+                });
+
+                // Wait for layout and scripts to be fully loaded
+                setTimeout(() => {
+                    // Force AdminLayout initialization if it exists
+                    if (window.AdminLayout) {
+                        console.log('Force initializing AdminLayout...');
+                        window.AdminLayout.forceInit();
+
+                        setTimeout(() => {
+                            if (activeNavPage) {
+                                window.AdminLayout.setActiveNav(activeNavPage);
+                            }
+                        }, 200);
+                    }
+
+                    // Load page-specific content
+                    if (contentLoader) {
+                        contentLoader();
+                    }
+                }, 500);
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load admin layout and inject edit category content
+        async function loadEditCategoryPage() {
+            await loadAdminLayoutWithScripts(loadEditCategoryContent, 'categories');
+        }
+
+        // Load edit category specific content
+        function loadEditCategoryContent() {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                pageContent.innerHTML = `
+                    <!-- Page Header -->
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">
+                            <i class="fas fa-edit me-2"></i>Chỉnh sửa Danh mục
+                        </h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <a href="/admin/categories" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Quay lại
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Alert Messages -->
+                    <div id="alertContainer"></div>
+
+                    <!-- Loading State -->
+                    <div id="loadingState" class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Đang tải...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Đang tải thông tin danh mục...</p>
+                    </div>
+
+                    <!-- Edit Form -->
+                    <div id="editFormContainer" style="display: none;" class="row justify-content-center">
+                        <div class="col-lg-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-edit me-2"></i>Thông tin Danh mục
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <form id="editCategoryForm" novalidate>
+                                        <input type="hidden" id="categoryId" name="id">
+
+                                        <div class="mb-3">
+                                            <label for="name" class="form-label fw-semibold">
+                                                Tên Danh mục <span class="text-danger">*</span>
+                                            </label>
+                                            <input type="text"
+                                                   class="form-control"
+                                                   id="name"
+                                                   name="name"
+                                                   placeholder="Nhập tên danh mục..."
+                                                   required
+                                                   maxlength="100">
+                                            <div class="form-text">
+                                                <i class="fas fa-info-circle me-1"></i>
+                                                Tối đa 100 ký tự. <span id="nameCounter">0/100</span>
+                                            </div>
+                                            <div class="invalid-feedback">
+                                                Vui lòng nhập tên danh mục!
+                                            </div>
+                                            <div id="nameAvailabilityFeedback" class="mt-1"></div>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <label for="description" class="form-label fw-semibold">
+                                                Mô tả
+                                            </label>
+                                            <textarea class="form-control"
+                                                      id="description"
+                                                      name="description"
+                                                      rows="4"
+                                                      placeholder="Nhập mô tả cho danh mục..."
+                                                      maxlength="500"></textarea>
+                                            <div class="form-text">
+                                                <i class="fas fa-info-circle me-1"></i>
+                                                Tối đa 500 ký tự (tùy chọn). <span id="descCounter">0/500</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                            <a href="/admin/categories" class="btn btn-secondary me-md-2">
+                                                <i class="fas fa-times me-2"></i>Hủy
+                                            </a>
+                                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                                                <span id="submitSpinner" class="spinner-border spinner-border-sm me-2" style="display: none;"></span>
+                                                <i class="fas fa-save me-2"></i>Cập nhật Danh mục
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Help Card -->
+                            <div class="card mt-4">
+                                <div class="card-header">
+                                    <h6 class="card-title mb-0">
+                                        <i class="fas fa-lightbulb me-2"></i>Gợi ý
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="mb-0">
+                                        <li><strong>Tên danh mục:</strong> Nên ngắn gọn, dễ hiểu và không trùng lặp</li>
+                                        <li><strong>Mô tả:</strong> Giúp khách hàng hiểu rõ hơn về loại sản phẩm</li>
+                                        <li><strong>Ví dụ:</strong> "Laptop Gaming", "Chuột Gaming", "Bàn phím cơ"</li>
+                                        <li><strong>Lưu ý:</strong> Tên danh mục sẽ được kiểm tra tự động để tránh trùng lặp</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Error State -->
+                    <div id="errorState" style="display: none;" class="text-center py-5">
+                        <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                        <h5 class="text-danger">Không thể tải thông tin danh mục</h5>
+                        <p class="text-muted mb-3">Danh mục không tồn tại hoặc đã xảy ra lỗi</p>
+                        <a href="/admin/categories" class="btn btn-primary">
+                            <i class="fas fa-arrow-left me-2"></i>Quay lại danh sách
+                        </a>
+                    </div>
+                `;
+
+                // Initialize edit category features
+                initEditCategoryFeatures();
+            }
+        }
+
+        // Category data storage
+        let originalCategoryData = null;
+
+        // Initialize edit category specific features
+        function initEditCategoryFeatures() {
+            // Load category data
+            loadCategoryData();
+        }
+
+        // Load category data from API
+        async function loadCategoryData() {
+            try {
+                const response = await axios.get(`/api/admin/categories/${categoryId}`);
+
+                if (response.data.success) {
+                    originalCategoryData = response.data.data;
+                    populateForm(originalCategoryData);
+                    showEditForm();
+
+                    // Initialize form features after data is loaded
+                    setupFormValidation();
+                    setupCharacterCounters();
+                    setupNameAvailabilityCheck();
+
+                } else {
+                    showError('Danh mục không tồn tại');
+                }
+            } catch (error) {
+                console.error('Error loading category:', error);
+                if (error.response && error.response.status === 404) {
+                    showError('Danh mục không tồn tại');
+                } else {
+                    showError('Không thể tải thông tin danh mục. Vui lòng thử lại!');
+                }
+            }
+        }
+
+        // Populate form with category data
+        function populateForm(category) {
+            document.getElementById('categoryId').value = category.id;
+            document.getElementById('name').value = category.name || '';
+            document.getElementById('description').value = category.description || '';
+
+            // Update character counters
+            updateCharacterCounter('name', category.name || '', 100);
+            updateCharacterCounter('description', category.description || '', 500);
+        }
+
+        // Update character counter
+        function updateCharacterCounter(fieldName, value, maxLength) {
+            const counter = document.getElementById(fieldName + 'Counter');
+            if (counter) {
+                const length = value.length;
+                counter.textContent = `${length}/${maxLength}`;
+
+                if (length > maxLength * 0.8) {
+                    counter.classList.add('text-warning');
+                } else {
+                    counter.classList.remove('text-warning');
+                }
+            }
+        }
+
+        // Show edit form
+        function showEditForm() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('editFormContainer').style.display = 'block';
+            document.getElementById('errorState').style.display = 'none';
+
+            // Focus on name input
+            setTimeout(() => {
+                const nameInput = document.getElementById('name');
+                if (nameInput) {
+                    nameInput.focus();
+                    nameInput.select();
+                }
+            }, 100);
+        }
+
+        // Show error state
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('editFormContainer').style.display = 'none';
+            document.getElementById('errorState').style.display = 'block';
+
+            if (message) {
+                showAlert('danger', message);
+            }
+        }
+
+        // Setup form validation
+        function setupFormValidation() {
+            const form = document.getElementById('editCategoryForm');
+
+            form.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (form.checkValidity()) {
+                    await submitForm();
+                }
+
+                form.classList.add('was-validated');
+            });
+        }
+
+        // Setup character counters
+        function setupCharacterCounters() {
+            const nameInput = document.getElementById('name');
+            const descInput = document.getElementById('description');
+            const nameCounter = document.getElementById('nameCounter');
+            const descCounter = document.getElementById('descCounter');
+
+            // Name counter
+            nameInput.addEventListener('input', function() {
+                updateCharacterCounter('name', this.value, 100);
+            });
+
+            // Description counter
+            descInput.addEventListener('input', function() {
+                updateCharacterCounter('description', this.value, 500);
+            });
+        }
+
+        // Setup name availability check
+        function setupNameAvailabilityCheck() {
+            const nameInput = document.getElementById('name');
+            const feedbackDiv = document.getElementById('nameAvailabilityFeedback');
+            let checkTimeout;
+
+            nameInput.addEventListener('input', function() {
+                const name = this.value.trim();
+
+                // Clear previous timeout
+                clearTimeout(checkTimeout);
+
+                // Clear feedback
+                feedbackDiv.innerHTML = '';
+
+                // Skip check if name hasn't changed
+                if (originalCategoryData && name === originalCategoryData.name) {
+                    nameInput.setCustomValidity('');
+                    return;
+                }
+
+                if (name.length >= 2) {
+                    // Debounced check
+                    checkTimeout = setTimeout(async () => {
+                        await checkNameAvailability(name);
+                    }, 500);
+                }
+            });
+
+            async function checkNameAvailability(name) {
+                try {
+                    feedbackDiv.innerHTML = `
+                        <small class="text-muted">
+                            <i class="fas fa-spinner fa-spin me-1"></i>Đang kiểm tra...
+                        </small>
+                    `;
+
+                    const response = await axios.get(`/api/admin/categories/exists/name/${encodeURIComponent(name)}`);
+
+                    if (response.data.success) {
+                        const exists = response.data.data;
+
+                        if (exists) {
+                            feedbackDiv.innerHTML = `
+                                <small class="text-danger">
+                                    <i class="fas fa-times-circle me-1"></i>Tên danh mục đã tồn tại
+                                </small>
+                            `;
+                            nameInput.setCustomValidity('Tên danh mục đã tồn tại');
+                        } else {
+                            feedbackDiv.innerHTML = `
+                                <small class="text-success">
+                                    <i class="fas fa-check-circle me-1"></i>Tên danh mục khả dụng
+                                </small>
+                            `;
+                            nameInput.setCustomValidity('');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error checking name availability:', error);
+                    feedbackDiv.innerHTML = `
+                        <small class="text-warning">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Không thể kiểm tra tên danh mục
+                        </small>
+                    `;
+                }
+            }
+        }
+
+        // Submit form
+        async function submitForm() {
+            const form = document.getElementById('editCategoryForm');
+            const submitBtn = document.getElementById('submitBtn');
+            const submitSpinner = document.getElementById('submitSpinner');
+
+            try {
+                // Show loading state
+                submitBtn.disabled = true;
+                submitSpinner.style.display = 'inline-block';
+                submitBtn.innerHTML = `
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    Đang cập nhật...
+                `;
+
+                // Prepare form data
+                const formData = new FormData(form);
+                const categoryData = {
+                    name: formData.get('name').trim(),
+                    description: formData.get('description').trim() || null
+                };
+
+                // Submit to API
+                const response = await axios.put(`/api/admin/categories/${categoryId}`, categoryData);
+
+                if (response.data.success) {
+                    showAlert('success', 'Cập nhật danh mục thành công!');
+
+                    // Update original data for comparison
+                    originalCategoryData = response.data.data;
+
+                    // Redirect to categories list after 1.5 seconds
+                    setTimeout(() => {
+                        window.location.href = '/admin/categories';
+                    }, 1500);
+                } else {
+                    showAlert('danger', 'Lỗi cập nhật danh mục: ' + response.data.message);
+                }
+
+            } catch (error) {
+                console.error('Error updating category:', error);
+
+                if (error.response && error.response.data && error.response.data.message) {
+                    showAlert('danger', error.response.data.message);
+                } else {
+                    showAlert('danger', 'Không thể cập nhật danh mục. Vui lòng thử lại!');
+                }
+            } finally {
+                // Reset button state
+                submitBtn.disabled = false;
+                submitSpinner.style.display = 'none';
+                submitBtn.innerHTML = `
+                    <i class="fas fa-save me-2"></i>Cập nhật Danh mục
+                `;
+            }
+        }
+
+        // Show alert message
+        function showAlert(type, message) {
+            const alertContainer = document.getElementById('alertContainer');
+            if (alertContainer) {
+                const alertId = 'alert-' + Date.now();
+                alertContainer.innerHTML = `
+                    <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
+                        <i class="fas ${getAlertIcon(type)} me-2"></i>
+                        ${message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
+
+                // Auto hide after 5 seconds for success/info alerts
+                if (type === 'success' || type === 'info') {
+                    setTimeout(() => {
+                        const alert = document.getElementById(alertId);
+                        if (alert) {
+                            const bsAlert = new bootstrap.Alert(alert);
+                            bsAlert.close();
+                        }
+                    }, 5000);
+                }
+
+                // Scroll to top to show alert
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        // Get alert icon based on type
+        function getAlertIcon(type) {
+            switch (type) {
+                case 'success': return 'fa-check-circle';
+                case 'danger': return 'fa-exclamation-triangle';
+                case 'warning': return 'fa-exclamation-triangle';
+                case 'info': return 'fa-info-circle';
+                default: return 'fa-info-circle';
+            }
+        }
+
+        // Load edit category page when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadEditCategoryPage();
+        });
+    </script>
+</body>
+</html>

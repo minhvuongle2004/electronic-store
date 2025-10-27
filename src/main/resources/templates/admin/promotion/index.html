@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Khuyến mãi - Admin Panel</title>
+
+    <!-- Load Bootstrap/jQuery trước khi load layout -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Function để load layout với script execution
+        async function loadLayoutWithScripts(layoutUrl, contentLoader, activeNavPage) {
+            try {
+                // Fetch layout
+                const response = await fetch(layoutUrl);
+                const layoutHtml = await response.text();
+
+                // Parse và execute scripts manually
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually
+                scripts.forEach(script => {
+                    if (script.src && !document.querySelector(`script[src="${script.src}"]`)) {
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        document.head.appendChild(newScript);
+                    } else if (!script.src) {
+                        const newScript = document.createElement('script');
+                        newScript.textContent = script.textContent;
+                        document.head.appendChild(newScript);
+                    }
+                });
+
+                // Initialize UI sau khi load
+                setTimeout(() => {
+                    // Initialize Bootstrap components
+                    document.querySelectorAll('.dropdown-toggle').forEach(el => {
+                        new bootstrap.Dropdown(el);
+                    });
+
+                    // Set active nav nếu cần
+                    if (activeNavPage && window.AdminLayout) {
+                        window.AdminLayout.setActiveNav(activeNavPage);
+                    }
+
+                    // Load content
+                    if (contentLoader) contentLoader();
+                }, 500);
+
+            } catch (error) {
+                console.error('Error loading layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+            }
+        }
+
+        // Load promotion list page content
+        function loadPromotionListContent() {
+            const pageContent = document.getElementById('pageContent');
+            if (pageContent) {
+                pageContent.innerHTML = `
+                    <!-- Page Header -->
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">
+                            <i class="fas fa-tags me-2"></i>Quản lý Khuyến mãi
+                        </h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <a href="/admin/promotions/create" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i>Thêm khuyến mãi
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Statistics Cards -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card text-white bg-success">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Đang hoạt động</h6>
+                                            <h3 id="activeCount">-</h3>
+                                        </div>
+                                        <div class="align-self-center">
+                                            <i class="fas fa-check-circle fa-2x"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-white bg-secondary">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Không hoạt động</h6>
+                                            <h3 id="inactiveCount">-</h3>
+                                        </div>
+                                        <div class="align-self-center">
+                                            <i class="fas fa-pause-circle fa-2x"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-white bg-warning">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Sắp hết hạn</h6>
+                                            <h3 id="expiringCount">-</h3>
+                                        </div>
+                                        <div class="align-self-center">
+                                            <i class="fas fa-clock fa-2x"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-white bg-info">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Tổng cộng</h6>
+                                            <h3 id="totalCount">-</h3>
+                                        </div>
+                                        <div class="align-self-center">
+                                            <i class="fas fa-tags fa-2x"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Tìm kiếm</label>
+                                    <input type="text" class="form-control" id="searchInput" placeholder="Tên hoặc mã khuyến mãi...">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Trạng thái</label>
+                                    <select class="form-select" id="statusFilter">
+                                        <option value="">Tất cả</option>
+                                        <option value="ACTIVE">Hoạt động</option>
+                                        <option value="INACTIVE">Không hoạt động</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Loại giảm giá</label>
+                                    <select class="form-select" id="discountTypeFilter">
+                                        <option value="">Tất cả</option>
+                                        <option value="PERCENT">Phần trăm</option>
+                                        <option value="FIXED">Số tiền cố định</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Hoạt động tại ngày</label>
+                                    <input type="date" class="form-control" id="activeDateFilter">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">&nbsp;</label>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-primary" onclick="searchPromotions()">
+                                            <i class="fas fa-search me-1"></i>Tìm kiếm
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">
+                                            <i class="fas fa-times me-1"></i>Xóa bộ lọc
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Promotions Table -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Danh sách Khuyến mãi</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="loading" class="text-center py-4">
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">Đang tải...</span>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive" id="tableContainer" style="display: none;">
+                                <table class="table table-striped table-hover">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Mã khuyến mãi</th>
+                                            <th>Tên</th>
+                                            <th>Loại giảm giá</th>
+                                            <th>Giá trị</th>
+                                            <th>Thời gian</th>
+                                            <th>Trạng thái</th>
+                                            <th>Đã sử dụng</th>
+                                            <th>Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="promotionsTableBody">
+                                        <!-- Data will be loaded here -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Empty state -->
+                            <div id="emptyState" class="text-center py-5" style="display: none;">
+                                <i class="fas fa-tags fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">Không có khuyến mãi nào</h5>
+                                <p class="text-muted">Hãy thêm khuyến mãi đầu tiên cho cửa hàng của bạn!</p>
+                                <a href="/admin/promotions/create" class="btn btn-primary">
+                                    <i class="fas fa-plus me-2"></i>Thêm khuyến mãi
+                                </a>
+                            </div>
+
+                            <!-- Pagination -->
+                            <nav aria-label="Pagination" id="paginationContainer" style="display: none;">
+                                <ul class="pagination justify-content-center mt-4" id="pagination">
+                                    <!-- Pagination will be generated here -->
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                `;
+
+                // Initialize page functionality
+                initializePromotionListPage();
+            }
+        }
+
+        // Initialize promotion list page
+        function initializePromotionListPage() {
+            loadStatistics();
+            loadPromotions(0);
+
+            // Set today as default for active date filter
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('activeDateFilter').value = today;
+
+            // Add event listeners
+            document.getElementById('searchInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchPromotions();
+                }
+            });
+        }
+
+        // Load statistics
+        async function loadStatistics() {
+            try {
+                const [activeRes, inactiveRes, expiringRes] = await Promise.all([
+                    axios.get('/api/admin/promotions/count/status?status=ACTIVE'),
+                    axios.get('/api/admin/promotions/count/status?status=INACTIVE'),
+                    axios.get('/api/admin/promotions/expiring')
+                ]);
+
+                document.getElementById('activeCount').textContent = activeRes.data.data;
+                document.getElementById('inactiveCount').textContent = inactiveRes.data.data;
+                document.getElementById('expiringCount').textContent = expiringRes.data.data.length;
+                document.getElementById('totalCount').textContent =
+                    parseInt(activeRes.data.data) + parseInt(inactiveRes.data.data);
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+
+        // Load promotions with pagination
+        async function loadPromotions(page = 0) {
+            try {
+                showLoading();
+                const response = await axios.get(`/api/admin/promotions?page=${page}`);
+                const data = response.data.data;
+
+                displayPromotions(data.content);
+                displayPagination(data, page);
+
+                hideLoading();
+            } catch (error) {
+                console.error('Error loading promotions:', error);
+                hideLoading();
+                showError('Không thể tải danh sách khuyến mãi');
+            }
+        }
+
+        // Search promotions with filters
+        async function searchPromotions(page = 0) {
+            try {
+                showLoading();
+
+                const searchTerm = document.getElementById('searchInput').value.trim();
+                const status = document.getElementById('statusFilter').value;
+                const discountType = document.getElementById('discountTypeFilter').value;
+                const activeDate = document.getElementById('activeDateFilter').value;
+
+                let url = '/api/admin/promotions';
+                const params = new URLSearchParams({ page: page.toString() });
+
+                // Determine which API to use based on filters
+                if (activeDate && !searchTerm && !status && !discountType) {
+                    // Use active by date filter
+                    url = '/api/admin/promotions/filter/active-by-date';
+                    params.append('date', activeDate);
+                } else if (searchTerm || status || discountType) {
+                    // Use advanced search
+                    url = '/api/admin/promotions/advanced-search';
+                    if (searchTerm) {
+                        params.append('name', searchTerm);
+                        params.append('code', searchTerm);
+                    }
+                    if (status) params.append('status', status);
+                    if (discountType) params.append('discountType', discountType);
+                }
+
+                const response = await axios.get(`${url}?${params}`);
+                const data = response.data.data;
+
+                displayPromotions(data.content);
+                displayPagination(data, page);
+
+                hideLoading();
+            } catch (error) {
+                console.error('Error searching promotions:', error);
+                hideLoading();
+                showError('Không thể tìm kiếm khuyến mãi');
+            }
+        }
+
+        // Display promotions in table
+        function displayPromotions(promotions) {
+            const tbody = document.getElementById('promotionsTableBody');
+            const tableContainer = document.getElementById('tableContainer');
+            const emptyState = document.getElementById('emptyState');
+
+            if (!promotions || promotions.length === 0) {
+                tableContainer.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            tableContainer.style.display = 'block';
+            emptyState.style.display = 'none';
+
+            tbody.innerHTML = promotions.map(promotion => `
+                <tr>
+                    <td>${promotion.id}</td>
+                    <td>
+                        <code>${promotion.code || 'N/A'}</code>
+                    </td>
+                    <td>
+                        <strong>${promotion.name}</strong>
+                        ${promotion.description ? `<br><small class="text-muted">${promotion.description}</small>` : ''}
+                    </td>
+                    <td>
+                        <span class="badge ${promotion.discountType === 'PERCENT' ? 'bg-info' : 'bg-warning'}">
+                            ${promotion.discountType === 'PERCENT' ? 'Phần trăm' : 'Cố định'}
+                        </span>
+                    </td>
+                    <td>
+                        <strong>${promotion.discountType === 'PERCENT' ? promotion.discountValue + '%' : formatCurrency(promotion.discountValue)}</strong>
+                        ${promotion.maxDiscountAmount ? `<br><small class="text-muted">Tối đa: ${formatCurrency(promotion.maxDiscountAmount)}</small>` : ''}
+                        ${promotion.minOrderAmount > 0 ? `<br><small class="text-muted">Đơn tối thiểu: ${formatCurrency(promotion.minOrderAmount)}</small>` : ''}
+                    </td>
+                    <td>
+                        <small>
+                            <i class="fas fa-calendar-alt text-success"></i> ${formatDate(promotion.startDate)}<br>
+                            <i class="fas fa-calendar-times text-danger"></i> ${formatDate(promotion.endDate)}
+                        </small>
+                    </td>
+                    <td>
+                        <span class="badge ${promotion.status === 'ACTIVE' ? 'bg-success' : 'bg-secondary'}">
+                            ${promotion.status === 'ACTIVE' ? 'Hoạt động' : 'Không hoạt động'}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge bg-primary">${promotion.usedCount || 0}</span>
+                        ${promotion.usageLimit ? `/ ${promotion.usageLimit}` : ''}
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="editPromotion(${promotion.id})" title="Chỉnh sửa">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm ${promotion.status === 'ACTIVE' ? 'btn-outline-warning' : 'btn-outline-success'}"
+                                    onclick="togglePromotionStatus(${promotion.id}, '${promotion.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'}')"
+                                    title="${promotion.status === 'ACTIVE' ? 'Vô hiệu hóa' : 'Kích hoạt'}">
+                                <i class="fas ${promotion.status === 'ACTIVE' ? 'fa-pause' : 'fa-play'}"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deletePromotion(${promotion.id})" title="Xóa">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Display pagination
+        function displayPagination(data, currentPage) {
+            const paginationContainer = document.getElementById('paginationContainer');
+            const pagination = document.getElementById('pagination');
+
+            if (data.totalPages <= 1) {
+                paginationContainer.style.display = 'none';
+                return;
+            }
+
+            paginationContainer.style.display = 'block';
+
+            let paginationHtml = '';
+
+            // Previous button
+            paginationHtml += `
+                <li class="page-item ${currentPage === 0 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="navigateToPage(${currentPage - 1}); return false;">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+            `;
+
+            // Page numbers
+            const startPage = Math.max(0, currentPage - 2);
+            const endPage = Math.min(data.totalPages - 1, currentPage + 2);
+
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHtml += `
+                    <li class="page-item ${i === currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="navigateToPage(${i}); return false;">${i + 1}</a>
+                    </li>
+                `;
+            }
+
+            // Next button
+            paginationHtml += `
+                <li class="page-item ${currentPage === data.totalPages - 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="navigateToPage(${currentPage + 1}); return false;">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            `;
+
+            pagination.innerHTML = paginationHtml;
+        }
+
+        // Navigation functions
+        function navigateToPage(page) {
+            const hasFilters = document.getElementById('searchInput').value.trim() ||
+                             document.getElementById('statusFilter').value ||
+                             document.getElementById('discountTypeFilter').value ||
+                             document.getElementById('activeDateFilter').value;
+
+            if (hasFilters) {
+                searchPromotions(page);
+            } else {
+                loadPromotions(page);
+            }
+        }
+
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('discountTypeFilter').value = '';
+            document.getElementById('activeDateFilter').value = '';
+            loadPromotions(0);
+        }
+
+        function editPromotion(id) {
+            window.location.href = `/admin/promotions/edit?id=${id}`;
+        }
+
+        // Toggle promotion status
+        async function togglePromotionStatus(id, newStatus) {
+            try {
+                await axios.patch(`/api/admin/promotions/${id}/status?status=${newStatus}`);
+                showSuccess('Cập nhật trạng thái thành công');
+                loadStatistics();
+                navigateToPage(0); // Reload current page
+            } catch (error) {
+                console.error('Error toggling status:', error);
+                showError('Không thể thay đổi trạng thái');
+            }
+        }
+
+        // Delete promotion
+        async function deletePromotion(id) {
+            if (!confirm('Bạn có chắc chắn muốn xóa khuyến mãi này?')) {
+                return;
+            }
+
+            try {
+                await axios.delete(`/api/admin/promotions/${id}`);
+                showSuccess('Xóa khuyến mãi thành công');
+                loadStatistics();
+                navigateToPage(0); // Reload current page
+            } catch (error) {
+                console.error('Error deleting promotion:', error);
+                const message = error.response?.data?.message || 'Không thể xóa khuyến mãi';
+                showError(message);
+            }
+        }
+
+        // Utility functions
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('tableContainer').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('vi-VN');
+        }
+
+        function showSuccess(message) {
+            // Simple alert for now - could be enhanced with toast notifications
+            alert('✓ ' + message);
+        }
+
+        function showError(message) {
+            // Simple alert for now - could be enhanced with toast notifications
+            alert('✗ ' + message);
+        }
+
+        // Load page when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            loadLayoutWithScripts('/admin/layouts/app.html', loadPromotionListContent, 'promotions');
+        });
+    </script>
+</body>
+</html>

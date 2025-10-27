@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Admin Panel</title>
+    <!-- Load axios first -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Chart.js for charts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+</head>
+<body>
+<div id="layoutContainer">
+    <!-- Layout will be loaded here -->
+</div>
+
+<script>
+    // Global variables
+    let dashboardData = {};
+    let chartInstances = {};
+    let refreshInterval;
+
+    // Utility function to properly load admin layout with script execution
+    async function loadAdminLayoutWithScripts(contentLoader, activeNavPage) {
+        try {
+            console.log('Loading admin layout for page:', activeNavPage);
+
+            const response = await fetch('/admin/layouts/app.html');
+            const layoutHtml = await response.text();
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = layoutHtml;
+
+            const scripts = tempDiv.querySelectorAll('script');
+
+            document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+            scripts.forEach(script => {
+                if (script.src) {
+                    if (!document.querySelector(`script[src="${script.src}"]`)) {
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        newScript.onload = () => console.log('External script loaded:', script.src);
+                        document.head.appendChild(newScript);
+                    }
+                } else {
+                    const newScript = document.createElement('script');
+                    newScript.textContent = script.textContent;
+                    document.head.appendChild(newScript);
+                }
+            });
+
+            setTimeout(() => {
+                if (window.AdminLayout) {
+                    console.log('Force initializing AdminLayout...');
+                    window.AdminLayout.forceInit();
+
+                    setTimeout(() => {
+                        if (activeNavPage) {
+                            window.AdminLayout.setActiveNav(activeNavPage);
+                        }
+                    }, 200);
+                }
+
+                if (contentLoader) {
+                    contentLoader();
+                }
+            }, 500);
+
+        } catch (error) {
+            console.error('Error loading layout:', error);
+            document.getElementById('layoutContainer').innerHTML =
+                '<div class="alert alert-danger">Không thể tải giao diện. Vui lòng thử lại!</div>';
+        }
+    }
+
+    // Load admin layout and inject dashboard content
+    async function loadDashboard() {
+        await loadAdminLayoutWithScripts(loadDashboardContent, 'dashboard');
+    }
+
+    // Load dashboard specific content
+    function loadDashboardContent() {
+        const pageContent = document.getElementById('pageContent');
+        if (pageContent) {
+            pageContent.innerHTML = `
+                    <!-- Page Header -->
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+            <h1 class="h2">
+            <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+            </h1>
+            <div class="text-muted">
+            <i class="fas fa-clock me-1"></i>
+            <span id="currentTime"></span>
+            </div>
+            </div>
+
+                <!-- Welcome Message -->
+            <div class="alert alert-success" role="alert">
+            <i class="fas fa-check-circle me-2"></i>
+            <strong>Chào mừng!</strong> Bạn đã đăng nhập thành công vào Admin Panel.
+            </div>
+
+                <!-- Dashboard Stats -->
+            <div class="row mb-4">
+            <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+            <div class="row no-gutters align-items-center">
+            <div class="col mr-2">
+            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+            Tổng Danh mục
+            </div>
+            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalCategories">
+            <i class="fas fa-spinner fa-spin"></i>
+            </div>
+            </div>
+            <div class="col-auto">
+            <i class="fas fa-tags fa-2x text-gray-300"></i>
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+
+            <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+            <div class="row no-gutters align-items-center">
+            <div class="col mr-2">
+            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+            Tổng Sản phẩm
+            </div>
+            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalProducts">
+            <i class="fas fa-spinner fa-spin"></i>
+            </div>
+            </div>
+            <div class="col-auto">
+            <i class="fas fa-box fa-2x text-gray-300"></i>
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+
+            <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+            <div class="row no-gutters align-items-center">
+            <div class="col mr-2">
+            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+            Tổng Đơn hàng
+            </div>
+            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalOrders">
+            <i class="fas fa-spinner fa-spin"></i>
+            </div>
+            </div>
+            <div class="col-auto">
+            <i class="fas fa-shopping-cart fa-2x text-gray-300"></i>
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+
+            <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+            <div class="row no-gutters align-items-center">
+            <div class="col mr-2">
+            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+            Người dùng
+            </div>
+            <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalUsers">
+            <i class="fas fa-spinner fa-spin"></i>
+            </div>
+            </div>
+            <div class="col-auto">
+            <i class="fas fa-users fa-2x text-gray-300"></i>
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+
+                <!-- Charts Row -->
+            <div class="row mb-4">
+                <!-- Sales Chart -->
+            <div class="col-lg-8">
+            <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">
+            <i class="fas fa-chart-line me-2"></i>Biểu đồ Bán hàng
+            </h6>
+            <div class="btn-group" role="group">
+            <button type="button" class="btn btn-sm btn-outline-primary active"
+            onclick="switchChart('daily')" id="dailyBtn">Theo Ngày</button>
+            <button type="button" class="btn btn-sm btn-outline-primary"
+            onclick="switchChart('monthly')" id="monthlyBtn">Theo Tháng</button>
+            <button type="button" class="btn btn-sm btn-outline-primary"
+            onclick="switchChart('products')" id="productsBtn">SP Bán Chạy</button>
+            </div>
+            </div>
+            <div class="card-body">
+            <div id="chartContainer" style="height: 400px;">
+            <canvas id="salesChart"></canvas>
+            <div id="productsChart" style="display: none;"></div>
+            </div>
+            </div>
+            </div>
+            </div>
+
+                <!-- Recent Orders -->
+            <div class="col-lg-4">
+            <div class="card shadow mb-4">
+            <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+            <i class="fas fa-list me-2"></i>Đơn hàng gần nhất
+            </h6>
+            </div>
+            <div class="card-body">
+            <div id="recentOrders">
+            <div class="text-center">
+            <i class="fas fa-spinner fa-spin"></i> Đang tải...
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+
+                <!-- Bottom Row -->
+            <div class="row">
+                <!-- Top Products -->
+            <div class="col-lg-6">
+            <div class="card shadow mb-4">
+            <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+            <i class="fas fa-star me-2"></i>Sản phẩm bán chạy
+            </h6>
+            </div>
+            <div class="card-body">
+            <div id="topProducts">
+            <div class="text-center">
+            <i class="fas fa-spinner fa-spin"></i> Đang tải...
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+
+                <!-- Top Customers -->
+            <div class="col-lg-6">
+            <div class="card shadow mb-4">
+            <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+            <i class="fas fa-users me-2"></i>Khách hàng VIP
+            </h6>
+            </div>
+            <div class="card-body">
+            <div id="topCustomers">
+            <div class="text-center">
+            <i class="fas fa-spinner fa-spin"></i> Đang tải...
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+            </div>
+            `;
+
+                // Initialize dashboard features
+                initDashboard();
+            }
+        }
+
+        // Initialize dashboard
+        async function initDashboard() {
+            // Update current time
+            updateTime();
+            setInterval(updateTime, 1000);
+
+            // Load all dashboard data
+            await loadDashboardData();
+
+            // Setup real-time updates
+            setupRealtimeUpdates();
+        }
+
+        // Load all dashboard data
+        async function loadDashboardData() {
+            try {
+                // Load overview data
+                await loadOverviewData();
+
+                // Load chart data (default to daily)
+                await loadChartData('daily');
+
+                // Load other components
+                await Promise.all([
+                    loadRecentOrders(),
+                    loadTopProducts(),
+                    loadTopCustomers()
+                ]);
+
+            } catch (error) {
+                console.error('Error loading dashboard data:', error);
+                showError('Có lỗi xảy ra khi tải dữ liệu dashboard');
+            }
+        }
+
+        // Load overview statistics
+        async function loadOverviewData() {
+            try {
+                const response = await axios.get('/api/admin/dashboard/overview');
+                if (response.data.success) {
+                    const data = response.data.data;
+                    dashboardData.overview = data;
+
+                    document.getElementById('totalCategories').textContent = data.totalCategories || 0;
+                    document.getElementById('totalProducts').textContent = data.totalProducts || 0;
+                    document.getElementById('totalOrders').textContent = data.totalOrders || 0;
+                    document.getElementById('totalUsers').textContent = data.totalUsers || 0;
+                }
+            } catch (error) {
+                console.error('Error loading overview:', error);
+                ['totalCategories', 'totalProducts', 'totalOrders', 'totalUsers'].forEach(id => {
+                    document.getElementById(id).textContent = 'N/A';
+                });
+            }
+        }
+
+        // Load chart data
+        async function loadChartData(type, period = null) {
+            try {
+                let url = `/api/admin/dashboard/charts?type=${type}`;
+                if (period) url += `&period=${period}`;
+
+                const response = await axios.get(url);
+                if (response.data.success) {
+                    const data = response.data.data;
+                    dashboardData.charts = dashboardData.charts || {};
+                    dashboardData.charts[type] = data;
+
+                    if (type === 'daily' || type === 'monthly') {
+                        renderSalesChart(data, type);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading chart data:', error);
+            }
+        }
+
+        // Render sales chart
+        function renderSalesChart(data, type) {
+            const canvas = document.getElementById('salesChart');
+            const ctx = canvas.getContext('2d');
+
+            // Destroy existing chart
+            if (chartInstances.sales) {
+                chartInstances.sales.destroy();
+            }
+
+            chartInstances.sales = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: 'Số đơn hàng',
+                            data: data.orderCounts,
+                            borderColor: '#4e73df',
+                            backgroundColor: 'rgba(78, 115, 223, 0.1)',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Doanh thu (VND)',
+                            data: data.revenues,
+                            borderColor: '#1cc88a',
+                            backgroundColor: 'rgba(28, 200, 138, 0.1)',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: type === 'daily' ? `Biểu đồ theo ngày - ${data.period}` : `Biểu đồ theo tháng - ${data.period}`
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load recent orders
+        async function loadRecentOrders() {
+            try {
+                const response = await axios.get('/api/admin/dashboard/recent-orders');
+                if (response.data.success) {
+                    const orders = response.data.data.orders;
+                    renderRecentOrders(orders);
+                }
+            } catch (error) {
+                console.error('Error loading recent orders:', error);
+                document.getElementById('recentOrders').innerHTML =
+                    '<div class="text-danger">Không thể tải đơn hàng</div>';
+            }
+        }
+
+        // Render recent orders
+        function renderRecentOrders(orders) {
+            const container = document.getElementById('recentOrders');
+
+            if (orders.length === 0) {
+                container.innerHTML = '<div class="text-muted">Chưa có đơn hàng nào</div>';
+                return;
+            }
+
+            let html = '';
+            orders.forEach(order => {
+                const statusClass = getStatusClass(order.status);
+                const price = formatPrice(order.totalPrice);
+                html += `
+            <div class="d-flex align-items-center mb-3 pb-2 border-bottom">
+            <div class="flex-grow-1">
+            <div class="font-weight-bold">${order.orderId}</div>
+            <small class="text-muted">${order.customerName || 'N/A'}</small>
+            </div>
+            <div class="text-end">
+            <div class="font-weight-bold">${price}</div>
+            <span class="badge ${statusClass}">${order.status}</span>
+            </div>
+            </div>
+            `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Load top products
+        async function loadTopProducts() {
+            try {
+                const response = await axios.get('/api/admin/dashboard/top-products');
+                if (response.data.success) {
+                    const products = response.data.data.products;
+                    renderTopProducts(products);
+                }
+            } catch (error) {
+                console.error('Error loading top products:', error);
+                document.getElementById('topProducts').innerHTML =
+                    '<div class="text-danger">Không thể tải sản phẩm</div>';
+            }
+        }
+
+        // Render top products
+        function renderTopProducts(products) {
+            const container = document.getElementById('topProducts');
+
+            if (products.length === 0) {
+                container.innerHTML = '<div class="text-muted">Chưa có dữ liệu</div>';
+                return;
+            }
+
+            let html = '';
+            products.forEach((product, index) => {
+                html += `
+            <div class="d-flex align-items-center mb-3">
+            <div class="badge badge-primary me-2">${index + 1}</div>
+            <img src="${product.imageUrl || '/images/no-image.png'}"
+            class="me-3" style="width: 40px; height: 40px; object-fit: cover;"
+            onerror="this.src='/images/no-image.png'">
+            <div class="flex-grow-1">
+            <div class="font-weight-bold">${product.name}</div>
+            <small class="text-muted">Đã bán: ${product.totalQuantity}</small>
+            </div>
+            </div>
+            `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Load top customers
+        async function loadTopCustomers() {
+            try {
+                const response = await axios.get('/api/admin/dashboard/top-customers');
+                if (response.data.success) {
+                    const customers = response.data.data.customers;
+                    renderTopCustomers(customers);
+                }
+            } catch (error) {
+                console.error('Error loading top customers:', error);
+                document.getElementById('topCustomers').innerHTML =
+                    '<div class="text-danger">Không thể tải khách hàng</div>';
+            }
+        }
+
+        // Render top customers
+        function renderTopCustomers(customers) {
+            const container = document.getElementById('topCustomers');
+
+            if (customers.length === 0) {
+                container.innerHTML = '<div class="text-muted">Chưa có dữ liệu</div>';
+                return;
+            }
+
+            let html = '';
+            customers.forEach((customer, index) => {
+                html += `
+            <div class="d-flex align-items-center mb-3">
+            <div class="badge badge-success me-2">${index + 1}</div>
+            <div class="flex-grow-1">
+            <div class="font-weight-bold">${customer.fullName}</div>
+            <small class="text-muted">${customer.email}</small>
+            </div>
+            <div class="text-end">
+            <div class="font-weight-bold">${customer.totalOrders} đơn</div>
+            </div>
+            </div>
+            `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Switch chart type
+        async function switchChart(type) {
+            // Update button states
+            document.querySelectorAll('.btn-group button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(type + 'Btn').classList.add('active');
+
+            if (type === 'products') {
+                // Show products chart
+                document.getElementById('salesChart').style.display = 'none';
+                document.getElementById('productsChart').style.display = 'block';
+                await loadTopProductsChart();
+            } else {
+                // Show sales chart
+                document.getElementById('salesChart').style.display = 'block';
+                document.getElementById('productsChart').style.display = 'none';
+                await loadChartData(type);
+            }
+        }
+
+        // Load top products chart
+        async function loadTopProductsChart() {
+            try {
+                const response = await axios.get('/api/admin/dashboard/top-products?type=monthly');
+                if (response.data.success) {
+                    const products = response.data.data.products;
+                    renderTopProductsChart(products);
+                }
+            } catch (error) {
+                console.error('Error loading products chart:', error);
+            }
+        }
+
+        // Render top products chart
+        function renderTopProductsChart(products) {
+            const container = document.getElementById('productsChart');
+
+            if (products.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted">Chưa có dữ liệu</div>';
+                return;
+            }
+
+            let html = '<div class="row">';
+            products.forEach((product, index) => {
+                const percentage = index === 0 ? 100 : (product.totalQuantity / products[0].totalQuantity) * 100;
+                html += `
+            <div class="col-12 mb-3">
+            <div class="d-flex align-items-center mb-2">
+            <img src="${product.imageUrl || '/images/no-image.png'}"
+            class="me-3" style="width: 50px; height: 50px; object-fit: cover;"
+            onerror="this.src='/images/no-image.png'">
+            <div class="flex-grow-1">
+            <div class="font-weight-bold">${product.name}</div>
+            <small class="text-muted">Đã bán: ${product.totalQuantity} sản phẩm</small>
+            </div>
+            </div>
+            <div class="progress" style="height: 10px;">
+            <div class="progress-bar bg-primary" role="progressbar"
+            style="width: ${percentage}%" aria-valuenow="${percentage}"
+            aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            </div>
+            `;
+            });
+            html += '</div>';
+
+            container.innerHTML = html;
+        }
+
+        // Setup real-time updates
+        function setupRealtimeUpdates() {
+            // Update every 30 seconds
+            refreshInterval = setInterval(async () => {
+                try {
+                    await loadOverviewData();
+                    await loadRecentOrders();
+                } catch (error) {
+                    console.error('Real-time update error:', error);
+                }
+            }, 30000);
+        }
+
+        // Utility functions
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleString('vi-VN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            const timeElement = document.getElementById('currentTime');
+            if (timeElement) {
+                timeElement.textContent = timeString;
+            }
+        }
+
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(price);
+        }
+
+        function getStatusClass(status) {
+            const statusClasses = {
+                'PENDING': 'badge-warning',
+                'SHIPPED': 'badge-info',
+                'COMPLETED': 'badge-success',
+                'CANCELED': 'badge-danger'
+            };
+            return statusClasses[status] || 'badge-secondary';
+        }
+
+        function showError(message) {
+            console.error(message);
+            // You can add a toast notification here
+        }
+
+        // Navigation functions
+        function goToCategories() {
+            if (window.AdminLayout) {
+                window.AdminLayout.loadPage('categories');
+                window.AdminLayout.setActiveNav('categories');
+            }
+        }
+
+        function goToProducts() {
+            if (window.AdminLayout) {
+                window.AdminLayout.loadPage('products');
+                window.AdminLayout.setActiveNav('products');
+            }
+        }
+
+        function goToOrders() {
+            if (window.AdminLayout) {
+                window.AdminLayout.loadPage('orders');
+                window.AdminLayout.setActiveNav('orders');
+            }
+        }
+
+        // Custom CSS for dashboard
+        const dashboardStyles = `
+            <style>
+            .border-left-primary {
+            border-left: 0.25rem solid #4e73df !important;
+            }
+            .border-left-success {
+            border-left: 0.25rem solid #1cc88a !important;
+            }
+            .border-left-info {
+            border-left: 0.25rem solid #36b9cc !important;
+            }
+            .border-left-warning {
+            border-left: 0.25rem solid #f6c23e !important;
+            }
+            .text-gray-800 {
+            color: #5a5c69 !important;
+            }
+            .text-gray-300 {
+            color: #dddfeb !important;
+            }
+            .shadow {
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15) !important;
+            }
+            .badge-primary { background-color: #4e73df; }
+            .badge-success { background-color: #1cc88a; }
+            .badge-warning { background-color: #f6c23e; }
+            .badge-info { background-color: #36b9cc; }
+            .badge-danger { background-color: #e74a3b; }
+            .badge-secondary { background-color: #858796; }
+            </style>
+            `;
+
+        // Cleanup function
+        function cleanup() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            Object.values(chartInstances).forEach(chart => {
+                if (chart) chart.destroy();
+            });
+        }
+
+        // Load dashboard when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add custom styles
+            document.head.insertAdjacentHTML('beforeend', dashboardStyles);
+
+            // Load the dashboard
+            loadDashboard();
+
+            // Cleanup on page unload
+            window.addEventListener('beforeunload', cleanup);
+        });
+    </script>
+</body>
+</html>

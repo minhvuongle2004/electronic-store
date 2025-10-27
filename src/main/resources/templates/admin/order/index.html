@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý đơn hàng - Admin</title>
+
+    <!-- Load Bootstrap trước khi load layout -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Load Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="layoutContainer">
+        <!-- Layout will be loaded here -->
+    </div>
+
+    <script>
+        // Load layout với scripts theo pattern được cung cấp
+        async function loadLayoutWithScripts(layoutUrl, contentLoader, activeNavPage) {
+            try {
+                console.log('Loading admin layout from:', layoutUrl);
+
+                // Fetch layout
+                const response = await fetch(layoutUrl);
+                const layoutHtml = await response.text();
+
+                // Parse và execute scripts manually
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = layoutHtml;
+                const scripts = tempDiv.querySelectorAll('script');
+
+                // Inject layout
+                document.getElementById('layoutContainer').innerHTML = layoutHtml;
+
+                // Execute scripts manually
+                scripts.forEach(script => {
+                    if (script.src && !document.querySelector(`script[src="${script.src}"]`)) {
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        newScript.onload = () => console.log('External script loaded:', script.src);
+                        document.head.appendChild(newScript);
+                    } else if (!script.src) {
+                        const newScript = document.createElement('script');
+                        newScript.textContent = script.textContent;
+                        document.head.appendChild(newScript);
+                    }
+                });
+
+                // Initialize UI sau khi load
+                setTimeout(() => {
+                    // Initialize Bootstrap components
+                    document.querySelectorAll('.dropdown-toggle').forEach(el => {
+                        new bootstrap.Dropdown(el);
+                    });
+
+                    // Set active nav nếu cần
+                    if (activeNavPage && window.AdminLayout) {
+                        window.AdminLayout.setActiveNav(activeNavPage);
+                    }
+
+                    // Load content
+                    if (contentLoader) contentLoader();
+                }, 500);
+
+                console.log('Admin layout loaded successfully');
+
+            } catch (error) {
+                console.error('Error loading admin layout:', error);
+                document.getElementById('layoutContainer').innerHTML =
+                    '<div class="alert alert-danger">Không thể tải layout</div>';
+            }
+        }
+
+        // Load page content
+        async function loadPageContent() {
+            console.log('=== LOADING ORDER MANAGEMENT PAGE ===');
+
+            const contentHtml = `
+                <div class="container-fluid py-4">
+                    <!-- Page Header -->
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2><i class="fas fa-shopping-cart me-2"></i>Quản lý đơn hàng</h2>
+                        <button class="btn btn-primary" onclick="refreshOrders()">
+                            <i class="fas fa-sync-alt me-2"></i>Làm mới
+                        </button>
+                    </div>
+
+                    <!-- Thống kê đơn hàng -->
+                    <div class="row mb-4" id="statisticsRow">
+                        <!-- Statistics cards will be loaded here -->
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-body">
+                            <h5 class="card-title">Bộ lọc và tìm kiếm</h5>
+                            <form id="filterForm">
+                                <div class="row">
+                                    <div class="col-md-3 mb-3">
+                                        <label for="statusFilter" class="form-label">Trạng thái đơn hàng</label>
+                                        <select class="form-select" id="statusFilter">
+                                            <option value="">Tất cả</option>
+                                            <option value="PENDING">Chờ xử lý</option>
+                                            <option value="SHIPPED">Đã gửi hàng</option>
+                                            <option value="COMPLETED">Hoàn thành</option>
+                                            <option value="CANCELED">Đã hủy</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label for="paymentStatusFilter" class="form-label">Trạng thái thanh toán</label>
+                                        <select class="form-select" id="paymentStatusFilter">
+                                            <option value="">Tất cả</option>
+                                            <option value="UNPAID">Chưa thanh toán</option>
+                                            <option value="PAID">Đã thanh toán</option>
+                                            <option value="FAILED">Thanh toán thất bại</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label for="paymentMethodFilter" class="form-label">Phương thức thanh toán</label>
+                                        <select class="form-select" id="paymentMethodFilter">
+                                            <option value="">Tất cả</option>
+                                            <option value="MOMO">MoMo</option>
+                                            <option value="COD">Thanh toán khi nhận hàng</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label for="searchInput" class="form-label">Tìm kiếm</label>
+                                        <input type="text" class="form-control" id="searchInput"
+                                               placeholder="Mã đơn hàng, tên khách hàng, SĐT...">
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-search me-2"></i>Tìm kiếm
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" onclick="resetFilters()">
+                                        <i class="fas fa-times me-2"></i>Xóa bộ lọc
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Alert container -->
+                    <div id="alertContainer"></div>
+
+                    <!-- Orders Table -->
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="card-title mb-0">Danh sách đơn hàng</h5>
+                                <div class="d-flex align-items-center">
+                                    <span class="me-3">Hiển thị:</span>
+                                    <select class="form-select form-select-sm" id="pageSizeSelect" style="width: auto;">
+                                        <option value="10">10</option>
+                                        <option value="20">20</option>
+                                        <option value="50">50</option>
+                                    </select>
+                                    <span class="ms-2">mục/trang</span>
+                                </div>
+                            </div>
+
+                            <!-- Loading indicator -->
+                            <div id="loadingIndicator" class="text-center py-4" style="display: none;">
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">Đang tải...</span>
+                                </div>
+                            </div>
+
+                            <!-- Orders table -->
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Mã đơn hàng</th>
+                                            <th>Khách hàng</th>
+                                            <th>Ngày đặt</th>
+                                            <th>Tổng tiền</th>
+                                            <th>Trạng thái</th>
+                                            <th>Thanh toán</th>
+                                            <th>Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="ordersTableBody">
+                                        <!-- Orders will be loaded here -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Pagination -->
+                            <nav aria-label="Phân trang đơn hàng">
+                                <ul class="pagination justify-content-center" id="paginationContainer">
+                                    <!-- Pagination will be loaded here -->
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+
+            `;
+
+            document.getElementById('pageContent').innerHTML = contentHtml;
+
+            // Initialize order management functionality
+            await initializeOrderManagement();
+        }
+
+        // Global variables
+        let currentPage = 0;
+        let currentPageSize = 10;
+        let currentFilters = {};
+
+        // Initialize order management functionality
+        async function initializeOrderManagement() {
+            console.log('Initializing order management...');
+
+            // Load statistics
+            await loadStatistics();
+
+            // Load orders
+            await loadOrders();
+
+            // Setup event listeners
+            setupEventListeners();
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Filter form
+            document.getElementById('filterForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                currentPage = 0; // Reset to first page
+                loadOrders();
+            });
+
+            // Page size change
+            document.getElementById('pageSizeSelect').addEventListener('change', function() {
+                currentPageSize = parseInt(this.value);
+                currentPage = 0; // Reset to first page
+                loadOrders();
+            });
+
+            // Search input with debounce
+            let searchTimeout;
+            document.getElementById('searchInput').addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    currentPage = 0;
+                    loadOrders();
+                }, 500);
+            });
+        }
+
+        // Load statistics
+        async function loadStatistics() {
+            try {
+                const response = await fetch('/admin/orders/api/statistics');
+                const result = await response.json();
+
+                if (result.success) {
+                    const stats = result.data;
+                    document.getElementById('statisticsRow').innerHTML = `
+                        <div class="col-md-2 col-sm-6 mb-3">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Tổng đơn hàng</h6>
+                                            <h3>${stats.totalOrders || 0}</h3>
+                                        </div>
+                                        <i class="fas fa-shopping-cart fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-6 mb-3">
+                            <div class="card bg-warning text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Chờ xử lý</h6>
+                                            <h3>${stats.pendingOrders || 0}</h3>
+                                        </div>
+                                        <i class="fas fa-clock fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-6 mb-3">
+                            <div class="card bg-secondary text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Đã gửi</h6>
+                                            <h3>${stats.shippedOrders || 0}</h3>
+                                        </div>
+                                        <i class="fas fa-truck fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-6 mb-3">
+                            <div class="card bg-success text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Hoàn thành</h6>
+                                            <h3>${stats.completedOrders || 0}</h3>
+                                        </div>
+                                        <i class="fas fa-check-circle fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-6 mb-3">
+                            <div class="card bg-danger text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Đã hủy</h6>
+                                            <h3>${stats.canceledOrders || 0}</h3>
+                                        </div>
+                                        <i class="fas fa-times-circle fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+
+        // Load orders with filters
+        async function loadOrders() {
+            try {
+                // Show loading
+                document.getElementById('loadingIndicator').style.display = 'block';
+                document.getElementById('ordersTableBody').innerHTML = '';
+
+                // Get filter values
+                const filters = {
+                    status: document.getElementById('statusFilter').value,
+                    paymentStatus: document.getElementById('paymentStatusFilter').value,
+                    paymentMethod: document.getElementById('paymentMethodFilter').value,
+                    search: document.getElementById('searchInput').value,
+                    page: currentPage,
+                    size: currentPageSize
+                };
+
+                currentFilters = filters;
+
+                // Build query string
+                const queryParams = new URLSearchParams();
+                Object.keys(filters).forEach(key => {
+                    if (filters[key]) {
+                        queryParams.append(key, filters[key]);
+                    }
+                });
+
+                const response = await fetch(`/admin/orders/api/list?${queryParams}`);
+                const result = await response.json();
+
+                // Hide loading
+                document.getElementById('loadingIndicator').style.display = 'none';
+
+                if (result.success) {
+                    const data = result.data;
+                    renderOrdersTable(data.orders);
+                    renderPagination(data);
+                } else {
+                    showAlert('danger', result.message);
+                }
+
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                document.getElementById('loadingIndicator').style.display = 'none';
+                showAlert('danger', 'Lỗi khi tải danh sách đơn hàng');
+            }
+        }
+
+        // Render orders table
+        function renderOrdersTable(orders) {
+            const tbody = document.getElementById('ordersTableBody');
+
+            if (orders.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center py-4">
+                            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">Không có đơn hàng nào</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = orders.map(order => `
+                <tr>
+                    <td>
+                        <strong>${order.orderId || '#' + order.id}</strong>
+                    </td>
+                    <td>
+                        <div>
+                            <strong>${order.shippingName || 'N/A'}</strong>
+                            <br>
+                            <small class="text-muted">${order.shippingPhone || ''}</small>
+                        </div>
+                    </td>
+                    <td>
+                        ${formatDateTime(order.orderDate)}
+                    </td>
+                    <td>
+                        <strong>${formatCurrency(order.totalPrice)}</strong>
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm" onchange="updateOrderStatus(${order.id}, this.value)" data-current="${order.status}">
+                            <option value="PENDING" ${order.status === 'PENDING' ? 'selected' : ''}>Chờ xử lý</option>
+                            <option value="SHIPPED" ${order.status === 'SHIPPED' ? 'selected' : ''}>Đã gửi hàng</option>
+                            <option value="COMPLETED" ${order.status === 'COMPLETED' ? 'selected' : ''}>Hoàn thành</option>
+                            <option value="CANCELED" ${order.status === 'CANCELED' ? 'selected' : ''}>Đã hủy</option>
+                        </select>
+                    </td>
+                    <td>
+                        ${getPaymentStatusBadge(order.paymentStatus)}
+                        <br>
+                        <small class="text-muted">${order.paymentMethod}</small>
+                    </td>
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm" onclick="viewOrderDetail(${order.id})" title="Xem chi tiết">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Render pagination
+        function renderPagination(data) {
+            const container = document.getElementById('paginationContainer');
+
+            if (data.totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let pagination = '';
+
+            // Previous button
+            pagination += `
+                <li class="page-item ${!data.hasPrevious ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${data.currentPage - 1})" ${!data.hasPrevious ? 'tabindex="-1"' : ''}>
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+            `;
+
+            // Page numbers
+            const startPage = Math.max(0, data.currentPage - 2);
+            const endPage = Math.min(data.totalPages - 1, data.currentPage + 2);
+
+            for (let i = startPage; i <= endPage; i++) {
+                pagination += `
+                    <li class="page-item ${i === data.currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="changePage(${i})">${i + 1}</a>
+                    </li>
+                `;
+            }
+
+            // Next button
+            pagination += `
+                <li class="page-item ${!data.hasNext ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${data.currentPage + 1})" ${!data.hasNext ? 'tabindex="-1"' : ''}>
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            `;
+
+            container.innerHTML = pagination;
+        }
+
+        // Utility functions
+        function formatDateTime(dateTime) {
+            if (!dateTime) return 'N/A';
+            const date = new Date(dateTime);
+            return date.toLocaleString('vi-VN');
+        }
+
+        function formatCurrency(amount) {
+            if (!amount) return '0 ₫';
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+
+        function getStatusBadge(status) {
+            const statusConfig = {
+                'PENDING': { class: 'bg-warning', text: 'Chờ xử lý' },
+                'SHIPPED': { class: 'bg-secondary', text: 'Đã gửi hàng' },
+                'COMPLETED': { class: 'bg-success', text: 'Hoàn thành' },
+                'CANCELED': { class: 'bg-danger', text: 'Đã hủy' }
+            };
+
+            const config = statusConfig[status] || { class: 'bg-secondary', text: status };
+            return `<span class="badge ${config.class}">${config.text}</span>`;
+        }
+
+        function getPaymentStatusBadge(status) {
+            const statusConfig = {
+                'UNPAID': { class: 'bg-warning', text: 'Chưa thanh toán' },
+                'PAID': { class: 'bg-success', text: 'Đã thanh toán' },
+                'FAILED': { class: 'bg-danger', text: 'Thất bại' }
+            };
+
+            const config = statusConfig[status] || { class: 'bg-secondary', text: status };
+            return `<span class="badge ${config.class}">${config.text}</span>`;
+        }
+
+        // Action functions
+        function refreshOrders() {
+            loadOrders();
+        }
+
+        function resetFilters() {
+            document.getElementById('filterForm').reset();
+            currentPage = 0;
+            loadOrders();
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            loadOrders();
+        }
+
+        function viewOrderDetail(orderId) {
+            window.location.href = `/admin/orders/${orderId}/detail`;
+        }
+
+        async function updateOrderStatus(orderId, newStatus) {
+            // Get current status from dropdown data attribute
+            const dropdown = event.target;
+            const currentStatus = dropdown.getAttribute('data-current');
+
+            // If no change, return
+            if (currentStatus === newStatus) {
+                return;
+            }
+
+            // Show confirmation
+            if (!confirm(`Bạn có chắc chắn muốn chuyển trạng thái thành "${getStatusText(newStatus)}"?`)) {
+                // Reset dropdown to current status
+                dropdown.value = currentStatus;
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/orders/api/${orderId}/status`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('success', 'Cập nhật trạng thái thành công');
+                    // Update data attribute
+                    dropdown.setAttribute('data-current', newStatus);
+                    // Refresh statistics
+                    loadStatistics();
+                } else {
+                    showAlert('danger', result.message);
+                    // Reset dropdown to current status
+                    dropdown.value = currentStatus;
+                }
+
+            } catch (error) {
+                console.error('Error updating status:', error);
+                showAlert('danger', 'Lỗi khi cập nhật trạng thái');
+                // Reset dropdown to current status
+                dropdown.value = currentStatus;
+            }
+        }
+
+        function getStatusText(status) {
+            const statusTexts = {
+                'PENDING': 'Chờ xử lý',
+                'SHIPPED': 'Đã gửi hàng',
+                'COMPLETED': 'Hoàn thành',
+                'CANCELED': 'Đã hủy'
+            };
+            return statusTexts[status] || status;
+        }
+
+
+        // Show alert function
+        function showAlert(type, message) {
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            document.getElementById('alertContainer').innerHTML = alertHtml;
+
+            // Auto dismiss after 5 seconds
+            setTimeout(() => {
+                const alert = document.querySelector('#alertContainer .alert');
+                if (alert) {
+                    alert.remove();
+                }
+            }, 5000);
+        }
+
+        // Load layout and content when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== DOM CONTENT LOADED ===');
+            loadLayoutWithScripts('/admin/layouts/app.html', loadPageContent, 'orders');
+        });
+    </script>
+</body>
+</html>
